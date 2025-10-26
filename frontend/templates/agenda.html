@@ -931,8 +931,20 @@
         });
       }
 
+      function getStreamlitApi() {
+        try {
+          return (
+            window.Streamlit ||
+            (window.parent && window.parent.Streamlit) ||
+            null
+          );
+        } catch (_) {
+          return window.Streamlit || null;
+        }
+      }
+
       function updateFrameHeight() {
-        const Streamlit = window.parent?.Streamlit || window.Streamlit;
+        const StreamlitApi = getStreamlitApi();
         const doc = document.documentElement;
         const body = document.body;
         const contentHeight = Math.max(
@@ -942,8 +954,9 @@
           doc.scrollHeight,
           doc.offsetHeight
         );
-        if (Streamlit && typeof Streamlit.setFrameHeight === 'function') {
-          Streamlit.setFrameHeight(contentHeight + 24);
+        if (StreamlitApi && typeof StreamlitApi.setFrameHeight === 'function') {
+          // Add a generous buffer to avoid truncation near the bottom
+          StreamlitApi.setFrameHeight(contentHeight + 200);
         }
       }
 
@@ -991,6 +1004,17 @@
           console.error('Agenda fatal error:', err);
         } catch (_) {}
         if (eventCount) {
+          // Warm-up polling to ensure height updates even if Streamlit API is not ready yet
+          (function warmupResize() {
+            let count = 0;
+            const id = setInterval(() => {
+              updateFrameHeight();
+              if (++count >= 80) {
+                // ~8s of warmup
+                clearInterval(id);
+              }
+            }, 100);
+          })();
           eventCount.textContent = '0';
         }
         if (eventsContainer) {

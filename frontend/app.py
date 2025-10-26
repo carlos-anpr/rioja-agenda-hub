@@ -75,7 +75,7 @@ def main() -> None:
         """
         <style>
             header, footer, [data-testid="stToolbar"] { display: none !important; }
-            [data-testid="stAppViewContainer"] { padding: 0 !important; }
+                html, body, [data-testid="stAppViewContainer"] { padding: 0 !important; overflow: auto !important; height: auto !important; }
             .block-container { padding: 0 !important; }
             .stApp { background: transparent; }
         </style>
@@ -106,9 +106,8 @@ def main() -> None:
         today=today,
     )
 
-    # Provide a visible initial height and enable scrolling as a safe fallback;
-    # JS still auto-resizes via Streamlit.setFrameHeight
-    st_html(html_content, height=1000, scrolling=True)
+    # Stable dual-scroll setup: iframe manages its own scroll while keeping the page chrome hidden
+    st_html(html_content, height=800, scrolling=True)
 
 
 if __name__ == "__main__":
