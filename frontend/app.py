@@ -1,116 +1,115 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import datetime as dt
 import json
 from pathlib import Path
 
 import streamlit as st
+from streamlit.components.v1 import html as st_html
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_PATH = PROJECT_ROOT / "data" / "processed" / "eventos_por_dia.json"
-CONFIG_DIR = PROJECT_ROOT / "crawl_configs"
+TEMPLATE_PATH = PROJECT_ROOT / "frontend" / "templates" / "agenda.html"
 
-st.set_page_config(page_title="Eventos", layout="wide")
+SOURCE_META = {
+    "agenda_larioja": {"label": "Agenda La Rioja", "color": "#667eea", "order": 0},
+    "larioja_lalistilla": {"label": "La Listilla", "color": "#764ba2", "order": 1},
+    "logrono_agenda": {"label": "Ayuntamiento", "color": "#fbbf24", "order": 2},
+    "planeta_rioja_planes": {"label": "Planeta Rioja", "color": "#4ade80", "order": 3},
+}
 
-if not DATA_PATH.exists():
-    st.warning(
-        "No se encontró data procesada. Ejecuta `python -m process.clean_and_merge` y vuelve a intentarlo.",
-        icon="⚠️",
-    )
-    st.stop()
+CATEGORY_COLORS = {
+    "música clásica": "#6E59A5",
+    "conciertos": "#CE5A83",
+    "exposiciones": "#D29B3D",
+    "planes con niños": "#2FA37A",
+    "visitas guiadas": "#4A86D4",
+    "espectáculos": "#D46464",
+    "cineclub": "#5F66D6",
+    "teatro": "#6E59A5",
+    "planes": "#2BA9A2",
+    "literario": "#D27A42",
+    "sin clasificar": "#6B7280",
+}
+DEFAULT_CATEGORY_COLOR = "#667eea"
 
-with DATA_PATH.open("r", encoding="utf-8") as fh:
-    eventos_por_dia = json.load(fh)
 
-if not eventos_por_dia:
-    st.info("Aún no hay eventos cargados. Lanza el crawler para poblar la base de datos.")
-    st.stop()
+def build_html_payload(
+    eventos_por_dia: dict[str, list[dict]],
+    default_date: str,
+    today: str,
+) -> str:
+    template = TEMPLATE_PATH.read_text(encoding="utf-8")
 
-fechas = sorted(eventos_por_dia.keys())
+    data_json = json.dumps(eventos_por_dia, ensure_ascii=False)
+    source_json = json.dumps(SOURCE_META, ensure_ascii=False)
+    palette_json = json.dumps({key.lower(): value for key, value in CATEGORY_COLORS.items()}, ensure_ascii=False)
 
-hoy = dt.date.today().isoformat()
-initial_index = fechas.index(hoy) if hoy in fechas else 0
+    safe_data_json = data_json.replace("</", "<\\/")
+    safe_source_json = source_json.replace("</", "<\\/")
+    safe_palette_json = palette_json.replace("</", "<\\/")
 
-col_filtro, col_stats = st.columns([2, 1])
-with col_filtro:
-    fecha_sel = st.selectbox("Fecha", fechas, index=initial_index)
-    eventos_dia = eventos_por_dia.get(fecha_sel, [])
-    if not eventos_dia:
-        st.info("No hay eventos registrados para esta fecha.")
-        st.stop()
-
-    conteos_fuente: dict[str, int] = {}
-    for evento in eventos_dia:
-        fuente = evento.get("source", "desconocido")
-        conteos_fuente[fuente] = conteos_fuente.get(fuente, 0) + 1
-
-    opciones_fuente = sorted(conteos_fuente.items(), key=lambda item: item[0].lower())
-    etiquetas_fuente = {fuente: f"{fuente} ({conteo})" for fuente, conteo in opciones_fuente}
-    valores_multiselect = [etiquetas_fuente[fuente] for fuente, _ in opciones_fuente]
-
-    seleccion_fuentes = st.multiselect(
-        "Fuente",
-        options=valores_multiselect,
-        default=valores_multiselect,
-        help="Selecciona qué fuentes mostrar",
-    )
-
-    fuentes_filtradas = {
-        fuente
-        for fuente, etiqueta in etiquetas_fuente.items()
-        if not seleccion_fuentes or etiqueta in seleccion_fuentes
+    replacements = {
+        "__DATA__": safe_data_json,
+        "__SOURCE_META__": safe_source_json,
+        "__CATEGORY_PALETTE__": safe_palette_json,
+        "__DEFAULT_DATE__": default_date,
+        "__TODAY__": today,
+        "__DEFAULT_COLOR__": DEFAULT_CATEGORY_COLOR,
     }
-    if not fuentes_filtradas:
-        fuentes_filtradas = set(conteos_fuente.keys())
 
-    eventos_filtrados_fuente = [
-        evento for evento in eventos_dia if evento.get("source", "desconocido") in fuentes_filtradas
-    ]
+    for token, value in replacements.items():
+        template = template.replace(token, value)
 
-    conteos_categoria: dict[str, int] = {}
-    for evento in eventos_filtrados_fuente:
-        categoria = evento.get("category") or "Sin clasificar"
-        conteos_categoria[categoria] = conteos_categoria.get(categoria, 0) + 1
+    return template
 
-    opciones_categoria = sorted(conteos_categoria.items(), key=lambda item: item[0].lower())
-    etiquetas_categoria = {cat: f"{cat} ({conteo})" for cat, conteo in opciones_categoria}
-    lista_categorias = ["Todas"] + [etiquetas_categoria[cat] for cat, _ in opciones_categoria]
-    categoria_elegida = st.selectbox("Categoría", lista_categorias)
 
-    if categoria_elegida == "Todas":
-        categoria_filtrada = None
-    else:
-        inverso_categoria = {etiqueta: cat for cat, etiqueta in etiquetas_categoria.items()}
-        categoria_filtrada = inverso_categoria.get(categoria_elegida)
-
-with col_stats:
-    eventos_visibles = [
-        evt
-        for evt in eventos_filtrados_fuente
-        if categoria_filtrada is None
-        or (evt.get("category") or "Sin clasificar") == categoria_filtrada
-    ]
-    st.metric("Eventos visibles", len(eventos_visibles))
-
-if not eventos_visibles:
-    st.info("No se encontraron eventos con los filtros seleccionados.")
-    st.stop()
-
-for evento in eventos_visibles:
-    categoria = evento.get("category") or "Sin clasificar"
-    st.markdown(f"### {evento.get('title', 'Sin título')}")
-    st.write(
-        f"**Fecha:** {evento.get('date_display')}  \
-**Lugar:** {evento.get('location') or 'Sin especificar'}  \
-**Categoría:** {categoria}"
+def main() -> None:
+    st.set_page_config(
+        page_title="🎭 Agenda Cultural La Rioja",
+        layout="wide",
+        initial_sidebar_state="collapsed",
     )
 
-    if evento.get("summary"):
-        st.write(evento["summary"])
+    st.markdown(
+        """
+        <style>
+            header, footer, [data-testid="stToolbar"] { display: none !important; }
+            [data-testid="stAppViewContainer"] { padding: 0 !important; }
+            .block-container { padding: 0 !important; }
+            .stApp { background: transparent; }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
-    link = evento.get("link")
-    if link:
-        st.markdown(f"[Link al evento]({link})")
+    if not DATA_PATH.exists():
+        st.error(
+            "⚠️ No se encontró data procesada. Ejecuta `python -m process.clean_and_merge` y vuelve a intentarlo."
+        )
+        return
 
-    st.caption(f"Fuente: {evento.get('source')} | {evento.get('source_url')}")
-    st.divider()
+    with DATA_PATH.open("r", encoding="utf-8") as file:
+        eventos_por_dia: dict[str, list[dict]] = json.load(file)
+
+    if not eventos_por_dia:
+        st.info("🎪 Aún no hay eventos cargados. Lanza el crawler para poblar la base de datos.")
+        return
+
+    today = dt.date.today().isoformat()
+    fechas = sorted(eventos_por_dia.keys())
+    default_date = today if today in eventos_por_dia else (fechas[0] if fechas else today)
+
+    html_content = build_html_payload(
+        eventos_por_dia=eventos_por_dia,
+        default_date=default_date,
+        today=today,
+    )
+
+    # Provide a visible initial height and enable scrolling as a safe fallback;
+    # JS still auto-resizes via Streamlit.setFrameHeight
+    st_html(html_content, height=1000, scrolling=True)
+
+
+if __name__ == "__main__":
+    main()

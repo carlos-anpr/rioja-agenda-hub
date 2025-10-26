@@ -1,0 +1,1031 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agenda Cultural La Rioja</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      :root {
+        --bg-primary: #0f0f1e;
+        --bg-secondary: #1a1a2e;
+        --bg-card: rgba(255, 255, 255, 0.03);
+        --border-color: rgba(255, 255, 255, 0.08);
+        --text-primary: #e0e0e0;
+        --text-secondary: #a0a0a0;
+        --text-muted: #666;
+        --accent-primary: #667eea;
+        --accent-secondary: #764ba2;
+      }
+
+      [data-theme='light'] {
+        --bg-primary: #f5f7fa;
+        --bg-secondary: #ffffff;
+        --bg-card: #ffffff;
+        --border-color: rgba(0, 0, 0, 0.08);
+        --text-primary: #1a1a2e;
+        --text-secondary: #4a5568;
+        --text-muted: #a0aec0;
+        --accent-primary: #667eea;
+        --accent-secondary: #764ba2;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+          'Helvetica Neue', Arial, sans-serif;
+        background: linear-gradient(
+          135deg,
+          var(--bg-primary) 0%,
+          var(--bg-secondary) 100%
+        );
+        color: var(--text-primary);
+        min-height: 100vh;
+        padding: 2rem 1rem 4rem;
+        transition: all 0.3s ease;
+      }
+
+      .container {
+        max-width: 1400px;
+        margin: 0 auto;
+      }
+
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 3rem;
+        padding-bottom: 2rem;
+        border-bottom: 1px solid var(--border-color);
+        flex-wrap: wrap;
+        gap: 1rem;
+      }
+
+      .header-content {
+        flex: 1;
+      }
+
+      .header h1 {
+        font-size: 2.5rem;
+        font-weight: 700;
+        background: linear-gradient(
+          135deg,
+          var(--accent-primary) 0%,
+          var(--accent-secondary) 100%
+        );
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        margin-bottom: 0.5rem;
+      }
+
+      .header p {
+        color: var(--text-secondary);
+        font-size: 1rem;
+      }
+
+      .theme-toggle {
+        padding: 0.75rem 1rem;
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        color: var(--text-primary);
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-size: 1.25rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .theme-toggle:hover {
+        background: rgba(102, 126, 234, 0.1);
+        border-color: var(--accent-primary);
+      }
+
+      .filters-section {
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 16px;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+        backdrop-filter: blur(10px);
+      }
+
+      .filters-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
+        flex-wrap: wrap;
+        gap: 1rem;
+      }
+
+      .filters-title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: var(--text-primary);
+      }
+
+      .view-toggle {
+        display: flex;
+        gap: 0.5rem;
+        background: rgba(102, 126, 234, 0.08);
+        padding: 0.25rem;
+        border-radius: 8px;
+      }
+
+      .view-btn {
+        padding: 0.5rem 1rem;
+        background: transparent;
+        border: none;
+        color: var(--text-secondary);
+        cursor: pointer;
+        border-radius: 6px;
+        transition: all 0.3s ease;
+        font-size: 0.875rem;
+      }
+
+      .view-btn.active {
+        background: rgba(102, 126, 234, 0.2);
+        color: var(--accent-primary);
+      }
+
+      .filters-compact {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 1.5rem;
+        align-items: start;
+      }
+
+      .filters-left {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        min-width: 200px;
+      }
+
+      .filters-right {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+      }
+
+      .filter-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+
+      .filter-label {
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+
+      .filter-input {
+        width: 100%;
+        padding: 0.75rem 1rem;
+        background: rgba(102, 126, 234, 0.05);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        color: var(--text-primary);
+        font-size: 0.95rem;
+        transition: all 0.3s ease;
+      }
+
+      .filter-input:focus {
+        outline: none;
+        border-color: var(--accent-primary);
+        background: rgba(102, 126, 234, 0.08);
+      }
+
+      .filter-input::placeholder {
+        color: var(--text-muted);
+      }
+
+      .category-cloud {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        align-items: center;
+      }
+
+      .category-tag {
+        padding: 0.5rem 1rem;
+        background: rgba(102, 126, 234, 0.08);
+        border: 1px solid var(--border-color);
+        border-radius: 20px;
+        color: var(--text-secondary);
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-size: 0.85rem;
+        font-weight: 500;
+        white-space: nowrap;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+      }
+
+      .category-tag:hover {
+        background: rgba(102, 126, 234, 0.15);
+        transform: translateY(-2px);
+      }
+
+      .category-tag.active {
+        background: linear-gradient(
+          135deg,
+          var(--accent-primary) 0%,
+          var(--accent-secondary) 100%
+        );
+        border-color: transparent;
+        color: #fff;
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+      }
+
+      .source-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        align-items: center;
+      }
+
+      .source-chip {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        background: rgba(102, 126, 234, 0.08);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-size: 0.85rem;
+      }
+
+      .source-chip:hover {
+        background: rgba(102, 126, 234, 0.12);
+      }
+
+      .source-chip.active {
+        background: rgba(102, 126, 234, 0.15);
+        border-color: var(--accent-primary);
+      }
+
+      .source-indicator {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--text-muted);
+        transition: all 0.3s ease;
+      }
+
+      .source-chip.active .source-indicator {
+        box-shadow: 0 0 8px rgba(102, 126, 234, 0.6);
+      }
+
+      .source-name {
+        color: var(--text-primary);
+        font-weight: 500;
+      }
+
+      .source-count {
+        color: var(--text-muted);
+        font-size: 0.75rem;
+      }
+
+      .stats-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
+        padding: 1rem 1.5rem;
+        background: var(--bg-card);
+        border-radius: 12px;
+        border: 1px solid var(--border-color);
+      }
+
+      .stats-info {
+        font-size: 0.95rem;
+        color: var(--text-secondary);
+      }
+
+      .stats-count {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--accent-primary);
+      }
+
+      .events-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+        gap: 1.5rem;
+      }
+
+      .events-grid.list-view {
+        grid-template-columns: 1fr;
+      }
+
+      .event-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 16px;
+        padding: 1.5rem;
+        transition: all 0.3s ease;
+        cursor: pointer;
+        position: relative;
+        overflow: hidden;
+      }
+
+      .event-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: linear-gradient(
+          90deg,
+          var(--accent-primary) 0%,
+          var(--accent-secondary) 100%
+        );
+        transform: scaleX(0);
+        transition: transform 0.3s ease;
+      }
+
+      .event-card:hover {
+        transform: translateY(-4px);
+        border-color: rgba(102, 126, 234, 0.3);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+      }
+
+      .event-card:hover::before {
+        transform: scaleX(1);
+      }
+
+      .event-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: start;
+        margin-bottom: 1rem;
+        gap: 1rem;
+      }
+
+      .event-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        line-height: 1.4;
+      }
+
+      .event-category {
+        padding: 0.375rem 0.75rem;
+        background: rgba(102, 126, 234, 0.15);
+        color: var(--accent-primary);
+        border-radius: 6px;
+        font-size: 0.75rem;
+        font-weight: 500;
+        white-space: nowrap;
+      }
+
+      .event-meta {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+      }
+
+      .event-meta-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+      }
+
+      .event-meta-icon {
+        width: 16px;
+        height: 16px;
+        opacity: 0.6;
+      }
+
+      .event-description {
+        font-size: 0.95rem;
+        color: var(--text-secondary);
+        line-height: 1.6;
+        margin-bottom: 1rem;
+      }
+
+      .event-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding-top: 1rem;
+        border-top: 1px solid var(--border-color);
+      }
+
+      .event-source {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+      }
+
+      .event-link {
+        color: var(--accent-primary);
+        text-decoration: none;
+        font-size: 0.875rem;
+        font-weight: 500;
+        transition: color 0.3s ease;
+      }
+
+      .event-link:hover {
+        color: var(--accent-secondary);
+      }
+
+      .empty-state {
+        text-align: center;
+        padding: 4rem 2rem;
+        color: var(--text-muted);
+      }
+
+      .empty-state-icon {
+        font-size: 4rem;
+        margin-bottom: 1rem;
+        opacity: 0.3;
+      }
+
+      .empty-state h3 {
+        font-size: 1.5rem;
+        margin-bottom: 0.5rem;
+        color: var(--text-secondary);
+      }
+
+      .empty-state p {
+        font-size: 1rem;
+      }
+
+      @media (max-width: 968px) {
+        .filters-compact {
+          grid-template-columns: 1fr;
+        }
+
+        .filters-left {
+          min-width: 100%;
+        }
+      }
+
+      @media (max-width: 768px) {
+        body {
+          padding: 1rem 0.5rem 3rem;
+        }
+
+        .header h1 {
+          font-size: 1.75rem;
+        }
+
+        .filters-section {
+          padding: 1rem;
+        }
+
+        .events-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .stats-bar {
+          flex-direction: column;
+          gap: 1rem;
+          text-align: center;
+        }
+
+        .category-cloud,
+        .source-chips {
+          justify-content: center;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <header class="header">
+        <div class="header-content">
+          <h1>🎭 Agenda Cultural La Rioja</h1>
+          <p>Descubre los mejores eventos culturales de la región</p>
+        </div>
+        <button class="theme-toggle" id="themeToggle">
+          <span id="themeIcon">🌙</span>
+        </button>
+      </header>
+
+      <section class="filters-section">
+        <div class="filters-header">
+          <h2 class="filters-title">Filtros</h2>
+          <div class="view-toggle">
+            <button class="view-btn active" data-view="grid">Grid</button>
+            <button class="view-btn" data-view="list">Lista</button>
+          </div>
+        </div>
+
+        <div class="filters-compact">
+          <div class="filters-left">
+            <div class="filter-group">
+              <label class="filter-label">Fecha</label>
+              <input
+                type="date"
+                class="filter-input"
+                id="dateFilter"
+                value="__DEFAULT_DATE__"
+              />
+            </div>
+            <div class="filter-group">
+              <label class="filter-label">Buscar</label>
+              <input
+                type="text"
+                class="filter-input"
+                id="searchFilter"
+                placeholder="Buscar eventos..."
+              />
+            </div>
+          </div>
+
+          <div class="filters-right">
+            <div class="filter-group">
+              <label class="filter-label">Categorías</label>
+              <div class="category-cloud" id="categoryCloud"></div>
+            </div>
+
+            <div class="filter-group">
+              <label class="filter-label">Fuentes</label>
+              <div class="source-chips" id="sourceChips"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="stats-bar">
+        <div class="stats-info">Total de eventos encontrados</div>
+        <div class="stats-count" id="eventCount">0</div>
+      </div>
+
+      <div class="events-grid" id="eventsContainer"></div>
+    </div>
+
+    <script>
+      const eventosPorDia = __DATA__;
+      const sourceMeta = __SOURCE_META__;
+      const categoryPalette = __CATEGORY_PALETTE__;
+      const defaultDate = '__DEFAULT_DATE__';
+      const todayDate = '__TODAY__';
+      const fallbackCategoryColor = '__DEFAULT_COLOR__';
+
+      const themeToggle = document.getElementById('themeToggle');
+      const themeIcon = document.getElementById('themeIcon');
+      const dateFilter = document.getElementById('dateFilter');
+      const searchFilter = document.getElementById('searchFilter');
+      const categoryCloud = document.getElementById('categoryCloud');
+      const sourceChips = document.getElementById('sourceChips');
+      const viewButtons = document.querySelectorAll('.view-btn');
+      const eventsContainer = document.getElementById('eventsContainer');
+      const eventCount = document.getElementById('eventCount');
+
+      const dates = Object.keys(eventosPorDia).sort();
+      let selectedDate = dates.includes(defaultDate)
+        ? defaultDate
+        : dates[0] || defaultDate;
+      if (dates.includes(todayDate)) {
+        selectedDate = todayDate;
+      }
+
+      let activeCategory = 'all';
+      let searchTerm = '';
+      let activeView = 'grid';
+      let activeSources = new Set(Object.keys(sourceMeta));
+      let resetSourcesFlag = false;
+
+      function getStorage() {
+        try {
+          const storage = window.localStorage;
+          const testKey = '__agenda_theme_test__';
+          storage.setItem(testKey, testKey);
+          storage.removeItem(testKey);
+          return storage;
+        } catch (error) {
+          return null;
+        }
+      }
+
+      const safeStorage = getStorage();
+
+      function loadTheme() {
+        const savedTheme = safeStorage?.getItem('agendaTheme') || 'dark';
+        applyTheme(savedTheme);
+      }
+
+      function applyTheme(theme) {
+        document.documentElement.setAttribute('data-theme', theme);
+        themeIcon.textContent = theme === 'dark' ? '🌙' : '☀️';
+        if (safeStorage) {
+          safeStorage.setItem('agendaTheme', theme);
+        }
+      }
+
+      function toggleTheme() {
+        const currentTheme =
+          document.documentElement.getAttribute('data-theme') || 'dark';
+        const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+        applyTheme(newTheme);
+      }
+
+      function slugify(text) {
+        return (text || '').toString().toLowerCase();
+      }
+
+      function escapeHtml(text) {
+        if (!text) return '';
+        return text
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      function formatDateRange(start, end, display) {
+        if (display) {
+          return display;
+        }
+        if (!start && !end) {
+          return 'Fecha por confirmar';
+        }
+        const locale = 'es-ES';
+        const opts = { day: 'numeric', month: 'short', year: 'numeric' };
+        if (start && end && start !== end) {
+          const startDate = new Date(start);
+          const endDate = new Date(end);
+          return `${startDate.toLocaleDateString(locale, {
+            day: 'numeric',
+            month: 'short',
+          })} - ${endDate.toLocaleDateString(locale, opts)}`;
+        }
+        const single = new Date(start || end);
+        return single.toLocaleDateString(locale, opts);
+      }
+
+      function renderCategories() {
+        categoryCloud.innerHTML = '';
+        const allEvents = eventosPorDia[selectedDate] || [];
+        const eventsForCounts = activeSources.size
+          ? allEvents.filter((evt) =>
+              activeSources.has(evt.source || 'desconocido')
+            )
+          : [];
+
+        const counts = eventsForCounts.reduce((acc, evt) => {
+          const cat = evt.category || 'Sin clasificar';
+          acc[cat] = (acc[cat] || 0) + 1;
+          return acc;
+        }, {});
+
+        if (activeCategory !== 'all' && !counts[activeCategory]) {
+          activeCategory = 'all';
+        }
+
+        const allTag = document.createElement('div');
+        allTag.className =
+          'category-tag' + (activeCategory === 'all' ? ' active' : '');
+        allTag.dataset.category = 'all';
+        allTag.textContent = 'Todas';
+        allTag.addEventListener('click', () => {
+          activeCategory = 'all';
+          renderCategories();
+          filterEvents();
+        });
+        categoryCloud.appendChild(allTag);
+
+        Object.entries(counts)
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .forEach(([cat, count]) => {
+            const tag = document.createElement('div');
+            tag.className =
+              'category-tag' + (activeCategory === cat ? ' active' : '');
+            tag.dataset.category = cat;
+            const label = document.createElement('span');
+            label.textContent = `${cat}`;
+            const badge = document.createElement('span');
+            badge.className = 'source-count';
+            badge.textContent = `(${count})`;
+            tag.appendChild(label);
+            tag.appendChild(badge);
+            tag.addEventListener('click', () => {
+              activeCategory = cat;
+              renderCategories();
+              filterEvents();
+            });
+            categoryCloud.appendChild(tag);
+          });
+      }
+
+      function renderSources() {
+        const events = eventosPorDia[selectedDate] || [];
+        const counts = events.reduce((acc, evt) => {
+          const src = evt.source || 'desconocido';
+          acc[src] = (acc[src] || 0) + 1;
+          return acc;
+        }, {});
+
+        const availableSources = Object.keys(counts);
+        if (resetSourcesFlag) {
+          activeSources = new Set(availableSources);
+          resetSourcesFlag = false;
+        }
+
+        sourceChips.innerHTML = '';
+        Object.entries(sourceMeta)
+          .sort((a, b) => (a[1].order || 0) - (b[1].order || 0))
+          .forEach(([source, meta]) => {
+            const count = counts[source] || 0;
+            if (!count) {
+              return;
+            }
+            const chip = document.createElement('div');
+            const active = activeSources.has(source);
+            chip.className = 'source-chip' + (active ? ' active' : '');
+            chip.dataset.source = source;
+
+            const indicator = document.createElement('div');
+            indicator.className = 'source-indicator';
+            indicator.style.background = meta.color || 'var(--accent-primary)';
+            if (active) {
+              indicator.style.boxShadow = `0 0 8px ${
+                meta.color || 'var(--accent-primary)'
+              }`;
+            }
+
+            const name = document.createElement('span');
+            name.className = 'source-name';
+            name.textContent = meta.label || source;
+
+            const counter = document.createElement('span');
+            counter.className = 'source-count';
+            counter.textContent = `(${count})`;
+
+            chip.appendChild(indicator);
+            chip.appendChild(name);
+            chip.appendChild(counter);
+
+            chip.addEventListener('click', () => {
+              if (activeSources.has(source)) {
+                activeSources.delete(source);
+              } else {
+                activeSources.add(source);
+              }
+              renderSources();
+              filterEvents();
+            });
+
+            sourceChips.appendChild(chip);
+          });
+
+        renderCategories();
+      }
+
+      function filterEvents() {
+        const events = (eventosPorDia[selectedDate] || []).slice();
+
+        if (!activeSources.size) {
+          renderEvents([]);
+          return;
+        }
+
+        const filtered = events.filter((event) => {
+          const source = event.source || 'desconocido';
+          if (!activeSources.has(source)) {
+            return false;
+          }
+          if (activeCategory !== 'all') {
+            const category = event.category || 'Sin clasificar';
+            if (category !== activeCategory) {
+              return false;
+            }
+          }
+          if (searchTerm) {
+            const haystack = `${event.title || ''} ${event.summary || ''} ${
+              event.location || ''
+            }`.toLowerCase();
+            if (!haystack.includes(searchTerm)) {
+              return false;
+            }
+          }
+          return true;
+        });
+
+        renderEvents(filtered);
+      }
+
+      function renderEvents(events) {
+        eventsContainer.className =
+          activeView === 'list' ? 'events-grid list-view' : 'events-grid';
+        if (!events.length) {
+          eventCount.textContent = '0';
+          eventsContainer.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">🔍</div>
+                        <h3>No se encontraron eventos</h3>
+                        <p>Intenta ajustar los filtros para ver más resultados</p>
+                    </div>
+                `;
+          updateFrameHeight();
+          return;
+        }
+
+        eventCount.textContent = `${events.length}`;
+
+        const cards = events
+          .map((event) => {
+            const title = escapeHtml(event.title || 'Sin título');
+            const summary = escapeHtml(event.summary || '');
+            const location = escapeHtml(
+              event.location || 'Ubicación no especificada'
+            );
+            const source = escapeHtml(
+              sourceMeta[event.source]?.label ||
+                event.source ||
+                'Fuente desconocida'
+            );
+            const link = escapeHtml(event.link || '');
+            const category = escapeHtml(event.category || 'Sin clasificar');
+            const categoryKey = slugify(event.category || 'sin clasificar');
+            const badgeColor =
+              categoryPalette[categoryKey] || fallbackCategoryColor;
+            const dateText = escapeHtml(
+              formatDateRange(
+                event.date_start,
+                event.date_end,
+                event.date_display
+              )
+            );
+            const hasLink = Boolean(link);
+
+            return `
+                    <div class="event-card">
+                        <div class="event-header">
+                            <h3 class="event-title">${title}</h3>
+                            <span class="event-category" style="color:${badgeColor}; background: ${badgeColor}1F;">${category}</span>
+                        </div>
+                        <div class="event-meta">
+                            <div class="event-meta-item">
+                                <svg class="event-meta-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                                <span>${dateText}</span>
+                            </div>
+                            <div class="event-meta-item">
+                                <svg class="event-meta-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                                <span>${location}</span>
+                            </div>
+                        </div>
+                        ${
+                          summary
+                            ? `<p class="event-description">${summary}</p>`
+                            : ''
+                        }
+                        <div class="event-footer">
+                            <span class="event-source">${source}</span>
+                            ${
+                              hasLink
+                                ? `<a href="${link}" class="event-link" target="_blank" rel="noopener noreferrer">Ver detalles →</a>`
+                                : ''
+                            }
+                        </div>
+                    </div>
+                `;
+          })
+          .join('');
+
+        eventsContainer.innerHTML = cards;
+        updateFrameHeight();
+      }
+
+      function attachEvents() {
+        themeToggle.addEventListener('click', toggleTheme);
+        searchFilter.addEventListener('input', (event) => {
+          searchTerm = event.target.value.trim().toLowerCase();
+          filterEvents();
+        });
+        dateFilter.addEventListener('change', (event) => {
+          selectedDate = event.target.value;
+          activeCategory = 'all';
+          resetSourcesFlag = true;
+          renderSources();
+          filterEvents();
+        });
+        viewButtons.forEach((button) => {
+          button.addEventListener('click', () => {
+            viewButtons.forEach((btn) => btn.classList.remove('active'));
+            button.classList.add('active');
+            activeView = button.dataset.view;
+            filterEvents();
+          });
+        });
+      }
+
+      function updateFrameHeight() {
+        const Streamlit = window.parent?.Streamlit || window.Streamlit;
+        const doc = document.documentElement;
+        const body = document.body;
+        const contentHeight = Math.max(
+          body.scrollHeight,
+          body.offsetHeight,
+          doc.clientHeight,
+          doc.scrollHeight,
+          doc.offsetHeight
+        );
+        if (Streamlit && typeof Streamlit.setFrameHeight === 'function') {
+          Streamlit.setFrameHeight(contentHeight + 24);
+        }
+      }
+
+      function initialize() {
+        const minDate = dates[0] || defaultDate;
+        const maxDate = dates[dates.length - 1] || defaultDate;
+        dateFilter.min = minDate;
+        dateFilter.max = maxDate;
+        dateFilter.value = selectedDate;
+        loadTheme();
+        renderSources();
+        filterEvents();
+        attachEvents();
+        updateFrameHeight();
+      }
+
+      window.addEventListener('resize', () => {
+        updateFrameHeight();
+      });
+
+      // Keep the iframe height in sync with layout changes
+      try {
+        if ('ResizeObserver' in window) {
+          const ro = new ResizeObserver(() => updateFrameHeight());
+          ro.observe(document.body);
+        } else {
+          const mo = new MutationObserver(() => updateFrameHeight());
+          mo.observe(document.body, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+          });
+        }
+      } catch (_) {
+        // Fallback: periodic updates for a short time
+        let ticks = 0;
+        const id = setInterval(() => {
+          updateFrameHeight();
+          if (++ticks > 60) clearInterval(id);
+        }, 100);
+      }
+
+      function showFatalError(err) {
+        try {
+          console.error('Agenda fatal error:', err);
+        } catch (_) {}
+        if (eventCount) {
+          eventCount.textContent = '0';
+        }
+        if (eventsContainer) {
+          const msg =
+            (err && (err.message || err.toString())) || 'Error desconocido';
+          eventsContainer.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">⚠️</div>
+                        <h3>Ha ocurrido un error cargando la agenda</h3>
+                        <p>${escapeHtml(msg)}</p>
+                    </div>
+                `;
+        }
+        updateFrameHeight();
+      }
+
+      window.addEventListener('error', (e) => {
+        // Only render once
+        if (!eventsContainer || eventsContainer.dataset.errorShown) return;
+        eventsContainer.dataset.errorShown = '1';
+        showFatalError(e?.error || e?.message || 'Error de script');
+      });
+
+      window.addEventListener('unhandledrejection', (e) => {
+        if (!eventsContainer || eventsContainer.dataset.errorShown) return;
+        eventsContainer.dataset.errorShown = '1';
+        const reason = e?.reason || 'Promesa rechazada sin manejar';
+        showFatalError(reason);
+      });
+
+      try {
+        initialize();
+      } catch (err) {
+        showFatalError(err);
+      }
+    </script>
+  </body>
+</html>
