@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import datetime, date, time
+from datetime import datetime, date, time, timedelta
 import re
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Tuple
@@ -40,6 +40,58 @@ SOURCE_FILTERS: Dict[str, SourceFilters] = {
     "planeta_rioja_planes": SourceFilters(),
     "logrono_agenda": SourceFilters(),
 }
+
+
+def _coerce_date(value: Any) -> date | None:
+    if value is None:
+        return None
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, str):
+        candidate = value.strip()
+        if not candidate:
+            return None
+        try:
+            parsed = datetime.fromisoformat(candidate)
+            return parsed.date()
+        except ValueError:
+            try:
+                parsed = parser.parse(candidate, fuzzy=True)
+                if parsed.year < 1900 or parsed.year > 2100:
+                    return None
+                return parsed.date()
+            except (ValueError, TypeError):
+                return None
+    return None
+
+
+def expand_event_days(event: Dict[str, Any], today: date) -> List[str]:
+    start_date = _coerce_date(event.get("date_start")) or _coerce_date(event.get("date"))
+    end_date = _coerce_date(event.get("date_end")) or _coerce_date(event.get("date_start")) or start_date
+
+    if not start_date:
+        base = event.get("date")
+        return [base] if isinstance(base, str) else []
+
+    if not end_date or end_date < start_date:
+        end_date = start_date
+
+    start_range = max(start_date, today)
+    if end_date < start_range:
+        return []
+
+    max_span_days = 366
+    if (end_date - start_range).days > max_span_days:
+        end_date = start_range + timedelta(days=max_span_days)
+
+    current = start_range
+    days: List[str] = []
+    while current <= end_date:
+        days.append(current.isoformat())
+        current += timedelta(days=1)
+    return days
 
 
 def load_payloads() -> Iterable[Dict[str, Any]]:
@@ -317,6 +369,13 @@ def normalize_event(raw: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, A
         end_text = strip_prefix(date_end_raw)
         end_dt = parse_date(end_text, postprocess) if end_text else end_dt
 
+    if start_dt and start_dt.year < 1900:
+        start_dt = None
+    if end_dt and end_dt.year < 1900:
+        end_dt = None
+    if start_dt and end_dt and end_dt < start_dt:
+        end_dt = start_dt
+
     def combine_with_today(source: datetime | None) -> datetime:
         if source is None:
             return datetime.combine(today, time())
@@ -406,8 +465,15 @@ def normalize_event(raw: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, A
 
 def group_by_day(events: Iterable[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
     grouped: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    today = datetime.now().date()
     for event in events:
-        grouped[event["date"]].append(event)
+        day_keys = expand_event_days(event, today)
+        if not day_keys:
+            day_keys = [event["date"]]
+        for day_key in day_keys:
+            event_copy = dict(event)
+            event_copy["date"] = day_key
+            grouped[day_key].append(event_copy)
     for date_key, items in grouped.items():
         grouped[date_key] = sorted(items, key=lambda ev: ev["title"].lower())
     return dict(sorted(grouped.items()))
