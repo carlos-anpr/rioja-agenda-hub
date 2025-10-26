@@ -1,0 +1,40 @@
+url: https://logrono.es/agenda-de-eventos?p_p_id=es_logrono_ayto_buscador_eventos_BuscadorEventosPortlet&p_p_lifecycle=0&p_p_state=normal&p_p_mode=view&_es_logrono_ayto_buscador_eventos_BuscadorEventosPortlet_text=&_es_logrono_ayto_buscador_eventos_BuscadorEventosPortlet_fromDate=&_es_logrono_ayto_buscador_eventos_BuscadorEventosPortlet_toDate=&_es_logrono_ayto_buscador_eventos_BuscadorEventosPortlet_instalacionMunicipalId=0&_es_logrono_ayto_buscador_eventos_BuscadorEventosPortlet_resetCur=false&_es_logrono_ayto_buscador_eventos_BuscadorEventosPortlet_delta=18&_es_logrono_ayto_buscador_eventos_BuscadorEventosPortlet_cur=1
+description: |
+  Agenda municipal de Logrono en la que se recogen eventos de ocio y cultura.
+schema:
+  name: logrono_agenda
+  baseSelector: '.listado-eventos .item'
+  fields:
+    - name: title
+      selector: '.titulo a'
+      type: text
+    - name: link
+      selector: '.titulo a'
+      type: attribute
+      attribute: href
+    - name: category
+      selector: '.category-btn'
+      type: text
+    - name: location
+      selector: '.lugar a, .lugar'
+      type: text
+    - name: date_start
+      selector: '.date:-soup-contains("Desde"), .date:-soup-contains("Día"), .date:-soup-contains("Dia")'
+      type: text
+    - name: date_end
+      selector: '.date:-soup-contains("Hasta")'
+      type: text
+    - name: image
+      selector: 'img.imagen'
+      type: attribute
+      attribute: src
+postprocess:
+  timezone: Europe/Madrid
+run_config:
+  wait_for: '.listado-eventos .item'
+  wait_for_timeout: 15000
+  delay_before_return_html: 0.5
+pagination:
+  template: https://logrono.es/agenda-de-eventos?p_p_id=es_logrono_ayto_buscador_eventos_BuscadorEventosPortlet&p_p_lifecycle=0&p_p_state=normal&p_p_mode=view&_es_logrono_ayto_buscador_eventos_BuscadorEventosPortlet_text=&_es_logrono_ayto_buscador_eventos_BuscadorEventosPortlet_fromDate=&_es_logrono_ayto_buscador_eventos_BuscadorEventosPortlet_toDate=&_es_logrono_ayto_buscador_eventos_BuscadorEventosPortlet_instalacionMunicipalId=0&_es_logrono_ayto_buscador_eventos_BuscadorEventosPortlet_resetCur=false&_es_logrono_ayto_buscador_eventos_BuscadorEventosPortlet_delta=18&_es_logrono_ayto_buscador_eventos_BuscadorEventosPortlet_cur={page}
+  start: 1
+  end: 6

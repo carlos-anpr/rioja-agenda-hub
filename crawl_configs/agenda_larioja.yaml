@@ -1,0 +1,34 @@
+url: https://agenda.larioja.com/
+description: |
+  Agenda oficial de eventos publicada por agenda.larioja.com.
+schema:
+  name: agenda_larioja
+  baseSelector: 'section article'
+  fields:
+    - name: title
+      selector: '.voc-agenda-titulo a, .voc-agenda-titulo2 a'
+      type: text
+    - name: link
+      selector: '.voc-agenda-titulo a, .voc-agenda-titulo2 a'
+      type: attribute
+      attribute: href
+    - name: category
+      selector: '.voc-agenda-antetitulo'
+      type: text
+    - name: description
+      selector: '.voc-agenda-noticia'
+      type: text
+    - name: location
+      selector: '.voc-agenda-localidad'
+      type: text
+    - name: date
+      selector: 'span.voc-agenda-lugar:-soup-contains("Fecha") + span.voc-agenda-dia'
+      type: text
+    - name: time
+      selector: 'span.voc-agenda-lugar:-soup-contains("Hora") + span.voc-agenda-dia'
+      type: text
+    - name: price
+      selector: 'span.voc-agenda-lugar:-soup-contains("Precio") + span.voc-agenda-dia'
+      type: text
+postprocess:
+  timezone: Europe/Madrid

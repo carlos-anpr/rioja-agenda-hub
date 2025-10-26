@@ -1,0 +1,42 @@
+url: https://larioja.lalistilla.com/
+description: |
+  Agenda cultural semanal destacada de La Listilla (La Rioja).
+schema:
+  name: larioja_lalistilla
+  baseSelector: '.btx-item.js-item-accordion'
+  fields:
+    - name: anchor_id
+      selector: '.btx-accordion-heading'
+      type: attribute
+      attribute: id
+    - name: heading_text
+      selector: '.btx-accordion-heading'
+      type: text
+    - name: title
+      selector: '.acordeon-title'
+      type: text
+    - name: date
+      selector: '.btx-item.js-item-html .btx-row--main:has(.twf.twf-ln-calendar-full) span.btx-custom_a-font'
+      type: text
+    - name: time
+      selector: '.btx-item.js-item-html .btx-row--main:has(.twf.twf-ln-clock) span.btx-custom_a-font'
+      type: text
+    - name: location
+      selector: '.btx-item.js-item-html .btx-row--main:has(.twf.twf-ln-map-marker) span.btx-custom_a-font'
+      type: text
+    - name: price
+      selector: '.btx-item.js-item-html .btx-row--main:has(.twf.twf-ln-tag) span.btx-custom_a-font'
+      type: text
+    - name: category
+      selector: '.btx-accordion-body'
+      type: attribute
+      attribute: class
+    - name: description
+      selector: '.btx-item.js-item-html p'
+      type: text
+    - name: link
+      selector: '#ctas_plan a[href]'
+      type: attribute
+      attribute: href
+postprocess:
+  timezone: Europe/Madrid

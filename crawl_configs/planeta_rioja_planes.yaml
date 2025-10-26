@@ -1,0 +1,31 @@
+url: https://elbalconsilver.es/planes/
+description: |
+  Listado de planes publicados por El Balcón Silver pensado para público +55.
+schema:
+  name: planeta_rioja_planes
+  baseSelector: 'div[data-elementor-type="loop-item"]'
+  fields:
+    - name: title
+      selector: '.elementor-heading-title a'
+      type: text
+    - name: link
+      selector: '.elementor-heading-title a'
+      type: attribute
+      attribute: href
+    - name: date
+      selector: '.elementor-post-info__item'
+      type: text
+    - name: category
+      selector: '[data-elementor-type="loop-item"]'
+      type: attribute
+      attribute: class
+    - name: image
+      selector: '.elementor-widget-theme-post-featured-image img'
+      type: attribute
+      attribute: src
+postprocess:
+  timezone: Europe/Madrid
+pagination:
+  template: https://elbalconsilver.es/planes/{page}/
+  start: 2
+  end: 5

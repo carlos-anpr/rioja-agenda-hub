@@ -1,0 +1,5 @@
+crawl4ai>=0.7.6
+PyYAML>=6.0
+streamlit>=1.36
+python-dateutil>=2.9
+beautifulsoup4>=4.12

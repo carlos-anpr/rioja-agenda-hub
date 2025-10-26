@@ -1,0 +1,449 @@
+"""Normaliza los JSON crudos y genera archivos consolidados."""
+
+from __future__ import annotations
+
+import json
+from collections import defaultdict
+from dataclasses import dataclass
+from datetime import datetime, date, time
+import re
+from pathlib import Path
+from typing import Any, Callable, Dict, Iterable, List, Tuple
+import unicodedata
+
+from dateutil import parser
+from urllib.parse import parse_qs, urljoin, urlparse, unquote
+from zoneinfo import ZoneInfo
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+RAW_DIR = PROJECT_ROOT / "data" / "eventos_raw"
+PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
+OUT_ALL = PROCESSED_DIR / "eventos.json"
+OUT_BY_DAY = PROCESSED_DIR / "eventos_por_dia.json"
+
+
+@dataclass(frozen=True)
+class SourceFilters:
+    strip_prefix_hooks: Tuple[Callable[[str], str], ...] = ()
+    normalize_display_hooks: Tuple[Callable[[str], str], ...] = ()
+    date_text_hooks: Tuple[Callable[[str], str], ...] = ()
+
+
+def _fix_colon_spacing(text: str) -> str:
+    return re.sub(r":\s+(?=\d)", ":", text)
+
+
+DEFAULT_FILTERS = SourceFilters()
+SOURCE_FILTERS: Dict[str, SourceFilters] = {
+    "agenda_larioja": SourceFilters(strip_prefix_hooks=(_fix_colon_spacing,)),
+    "larioja_lalistilla": SourceFilters(),
+    "planeta_rioja_planes": SourceFilters(),
+    "logrono_agenda": SourceFilters(),
+}
+
+
+def load_payloads() -> Iterable[Dict[str, Any]]:
+    for path in RAW_DIR.glob("*.json"):
+        with path.open("r", encoding="utf-8") as fh:
+            payload = json.load(fh)
+            payload.setdefault("name", path.stem)
+            yield payload
+
+
+def clean_category(value: Any) -> str:
+    if not value:
+        return "Sin clasificar"
+    text = str(value).replace("-", " ")
+    text = re.sub(r"\s+", " ", text).strip()
+    if not text:
+        return "Sin clasificar"
+    return text.title()
+
+
+def reference_today(meta: Dict[str, Any]) -> date:
+    tz_name = meta.get("timezone") if isinstance(meta, dict) else None
+    if tz_name:
+        try:
+            return datetime.now(ZoneInfo(tz_name)).date()
+        except Exception:  # noqa: BLE001
+            pass
+    return datetime.now().date()
+
+
+def extract_anchor(header_id: Any) -> str | None:
+    if not header_id:
+        return None
+    match = re.search(r"(\d+)$", str(header_id))
+    if match:
+        return match.group(1)
+    return None
+
+
+def decode_lalistilla_link(raw_link: str) -> str | None:
+    parsed = urlparse(raw_link)
+    query = parse_qs(parsed.query)
+    for key in ("text", "body"):
+        for value in query.get(key, []):
+            decoded = unquote(value)
+            match = re.search(r"https://larioja\.lalistilla\.com/#(\d+)", decoded)
+            if match:
+                return f"https://larioja.lalistilla.com/#{match.group(1)}"
+    return None
+
+
+def derive_category_and_title(raw: Dict[str, Any]) -> tuple[str, str]:
+    title_source = raw.get("title") or raw.get("heading_text") or raw.get("name") or "Sin título"
+    title = str(title_source).strip()
+    raw_category = raw.get("category")
+
+    if isinstance(raw_category, list):
+        raw_category = " ".join(str(part) for part in raw_category)
+
+    extracted: str | None = None
+    if isinstance(raw_category, str):
+        category_matches = re.findall(r"category-([\w-]+)", raw_category, re.IGNORECASE)
+        if category_matches:
+            preferred = next(
+                (token for token in category_matches if token.lower() not in {"agenda", "planes"}),
+                None,
+            )
+            extracted = preferred or category_matches[0]
+        if not extracted:
+            for pattern in (
+                r"body-plan-([\w-]+)",
+                r"heading-([\w-]+)",
+                r"module-acordeon-([\w-]+)",
+            ):
+                match = re.search(pattern, raw_category, re.IGNORECASE)
+                if match:
+                    extracted = match.group(1)
+                    break
+        if not extracted and raw_category.strip():
+            extracted = raw_category
+
+    clean_title = title
+    if ":" in title:
+        prefix, rest = title.split(":", 1)
+        if rest.strip():
+            if not extracted:
+                extracted = prefix.strip()
+            clean_title = rest.strip()
+
+    category = clean_category(extracted)
+    return category, clean_title
+
+
+def build_link(raw: Dict[str, Any], payload: Dict[str, Any], anchor: str | None) -> str | None:
+    source_url = payload.get("source_url", "")
+    raw_link = raw.get("link") or raw.get("url")
+    if isinstance(raw_link, str) and raw_link.strip():
+        link = raw_link.strip()
+        if "api.whatsapp.com" in link:
+            decoded = decode_lalistilla_link(link)
+            if decoded:
+                return decoded
+        if "@" in link and not urlparse(link).scheme:
+            return f"mailto:{link}"
+        if link.startswith("/"):
+            return urljoin(source_url, link)
+        return link
+    if anchor:
+        return urljoin(source_url, f"#{anchor}")
+    return None
+
+
+def prepare_date_text(raw: Any) -> str | None:
+    if raw is None:
+        return None
+    text = " ".join(str(raw).replace("\u2014", "–").replace("\u2013", "–").replace("\u2012", "–").split())
+    if not text:
+        return None
+    text = re.sub(r"(?i)^(del|de|desde|hasta|al|a|el|la|los|las)\s+", "", text).strip()
+    text = text.split("|", 1)[0].strip()
+    text = re.split(r"\s*[–-]\s*", text, maxsplit=1)[0]
+    text = re.sub(r"\.(?=\d)", " ", text)
+    text = re.sub(r"([A-Za-z])\.", r"\1", text)
+    text = re.sub(r"(\d{4})(\d{4})", r"\1 \2", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    tokens = text.split()
+    while len(tokens) >= 2 and tokens[-1] == tokens[-2]:
+        tokens = tokens[:-1]
+    text = " ".join(tokens)
+
+    month_map = {
+        "enero": "january",
+        "febrero": "february",
+        "marzo": "march",
+        "abril": "april",
+        "mayo": "may",
+        "junio": "june",
+        "julio": "july",
+        "agosto": "august",
+        "septiembre": "september",
+        "setiembre": "september",
+        "octubre": "october",
+        "noviembre": "november",
+        "diciembre": "december",
+    }
+    for es, en in month_map.items():
+        text = re.sub(rf"(?i)\b{es}\b", en, text)
+
+    weekday_map = {
+        "lunes": "monday",
+        "martes": "tuesday",
+        "miércoles": "wednesday",
+        "miercoles": "wednesday",
+        "jueves": "thursday",
+        "viernes": "friday",
+        "sábado": "saturday",
+        "sabado": "saturday",
+        "domingo": "sunday",
+    }
+    for es, en in weekday_map.items():
+        text = re.sub(rf"(?i)\b{es}\b", en, text)
+
+    return text
+
+
+def parse_date(text: Any, meta: Dict[str, Any]) -> datetime | None:
+    cleaned = prepare_date_text(text)
+    if not cleaned:
+        return None
+    hint = meta.get("date_format_hint") if isinstance(meta, dict) else None
+    tz_name = meta.get("timezone") if isinstance(meta, dict) else None
+    default_dt = datetime.now(ZoneInfo(tz_name)) if tz_name else datetime.now()
+    try:
+        if hint:
+            dt = datetime.strptime(cleaned, hint)
+        else:
+            dt = parser.parse(cleaned, default=default_dt)
+    except (ValueError, TypeError):
+        try:
+            dt = parser.parse(cleaned, dayfirst=False, fuzzy=True, default=default_dt)
+        except (ValueError, TypeError):
+            return None
+    if tz_name:
+        try:
+            dt = dt.replace(tzinfo=ZoneInfo(tz_name))
+        except Exception:  # noqa: BLE001
+            pass
+    return dt
+
+
+def normalize_event(raw: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any] | None:
+    metadata = payload.get("metadata") or {}
+    postprocess = metadata.get("postprocess") or {}
+    source_name = payload.get("name")
+    filters = SOURCE_FILTERS.get(source_name or "", DEFAULT_FILTERS)
+
+    date_text_raw = raw.get("date")
+    date_start_raw = raw.get("date_start")
+    date_end_raw = raw.get("date_end")
+    date_text = date_text_raw
+    time_text = raw.get("time")
+    if isinstance(time_text, str) and time_text.strip():
+        if date_text:
+            date_text = f"{date_text} {time_text}"
+        else:
+            date_text = time_text
+
+    today = reference_today(postprocess)
+
+    start_dt: datetime | None = None
+    end_dt: datetime | None = None
+    start_text: str | None = None
+    end_text: str | None = None
+
+    def strip_prefix(value: str) -> str:
+        cleaned = unicodedata.normalize("NFKC", str(value))
+        cleaned = cleaned.replace("\xa0", " ")
+        cleaned = re.sub(r"(?i)(desde|hasta)(el)", r"\1 el", cleaned)
+        cleaned = re.sub(r"(?i)(dia)(\d)", r"\1 \2", cleaned)
+        cleaned = re.sub(r"(?i)(día)(\d)", r"\1 \2", cleaned)
+        cleaned = re.sub(r"(?<=[A-Za-zÁÉÍÓÚÜáéíóúü])(?=\d)", " ", cleaned)
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
+        for hook in filters.strip_prefix_hooks:
+            cleaned = hook(cleaned)
+        prefix_pattern = re.compile(r"(?i)^(del|de|desde|hasta|al|a|el|la|los|las)\b\s*")
+        while True:
+            match = prefix_pattern.match(cleaned)
+            if not match:
+                break
+            cleaned = cleaned[match.end():].lstrip()
+        return cleaned.strip()
+
+    if isinstance(date_text, str):
+        normalized = date_text.replace("\u2014", "–").replace("\u2013", "–")
+        normalized = normalized.replace("-", " – ")
+        normalized = re.sub(r"\s+", " ", normalized).strip()
+        lower = normalized.lower()
+        for hook in filters.date_text_hooks:
+            normalized = hook(normalized)
+
+        start_text = strip_prefix(normalized) if normalized else None
+        end_text = None
+
+        if "hasta" in lower:
+            parts = re.split(r"(?i)\bhasta\b", normalized, maxsplit=1)
+            if len(parts) == 2:
+                start_text = strip_prefix(parts[0]) or None
+                end_text = strip_prefix(parts[1]) or None
+        elif re.match(r"(?i)^del\s+.+\s+al\s+.+", normalized):
+            parts = re.split(r"(?i)\s+al\s+", normalized, maxsplit=1)
+            if len(parts) == 2:
+                start_text = strip_prefix(parts[0]) or None
+                end_text = strip_prefix(parts[1]) or None
+        elif re.match(r"(?i)^de\s+.+\s+a\s+.+", normalized):
+            parts = re.split(r"(?i)\s+a\s+", normalized, maxsplit=1)
+            if len(parts) == 2:
+                start_text = strip_prefix(parts[0]) or None
+                end_text = strip_prefix(parts[1]) or None
+        elif "–" in normalized:
+            parts = normalized.split("–", 1)
+            if len(parts) == 2:
+                start_text = strip_prefix(parts[0]) or None
+                end_text = strip_prefix(parts[1]) or None
+
+        start_dt = parse_date(start_text, postprocess) if start_text else None
+        end_dt = parse_date(end_text, postprocess) if end_text else None
+    else:
+        start_dt = parse_date(date_text, postprocess)
+
+    if isinstance(date_start_raw, str) and date_start_raw.strip():
+        start_text = strip_prefix(date_start_raw)
+        start_dt = parse_date(start_text, postprocess) if start_text else start_dt
+
+    if isinstance(date_end_raw, str) and date_end_raw.strip():
+        end_text = strip_prefix(date_end_raw)
+        end_dt = parse_date(end_text, postprocess) if end_text else end_dt
+
+    def combine_with_today(source: datetime | None) -> datetime:
+        if source is None:
+            return datetime.combine(today, time())
+        base_time = source.timetz() if source.tzinfo else source.time()
+        return datetime.combine(today, base_time)
+
+    event_dt: datetime | None = None
+    if start_dt and start_dt.date() >= today:
+        event_dt = start_dt
+    elif end_dt and end_dt.date() >= today:
+        tz_source = start_dt or end_dt
+        event_dt = combine_with_today(tz_source)
+        if tz_source and tz_source.tzinfo:
+            event_dt = event_dt.replace(tzinfo=tz_source.tzinfo)
+    else:
+        event_dt = start_dt or end_dt
+
+    if not event_dt:
+        return None
+
+    if event_dt.date() < today and (not end_dt or end_dt.date() < today):
+        return None
+
+    anchor = extract_anchor(raw.get("anchor_id"))
+    category, title = derive_category_and_title(raw)
+    if category.lower() == "sin clasificar" and payload.get("name") == "planeta_rioja_planes":
+        category = "Planes"
+    link = build_link(raw, payload, anchor)
+
+    normalized_link: str | None = None
+    if link:
+        parsed = urlparse(link)
+        if parsed.scheme or link.startswith("#"):
+            normalized_link = link
+        else:
+            normalized_link = urljoin(payload.get("source_url", ""), link)
+
+    def normalize_display(value: Any) -> str | None:
+        if not isinstance(value, str):
+            return None
+        text = unicodedata.normalize("NFKC", value)
+        text = text.replace("\xa0", " ")
+        text = re.sub(r"\s+", " ", text).strip()
+        text = text.replace("Desdeel", "Desde el").replace("Hastael", "Hasta el")
+        text = text.replace("Desdela", "Desde la").replace("Hastala", "Hasta la")
+        text = text.replace("Desdelos", "Desde los").replace("Hastalos", "Hasta los")
+        text = text.replace("Desdeles", "Desde les").replace("Hastales", "Hasta les")
+        text = text.replace("D?a", "Día").replace("Dia", "Día")
+        text = re.sub(r"(?<=\D)(?=\d)", " ", text)
+        text = re.sub(r"\s+", " ", text).strip()
+        for hook in filters.normalize_display_hooks:
+            text = hook(text)
+        return text or None
+
+    date_display: str | None = normalize_display(date_text_raw)
+    if not date_display and any(isinstance(value, str) and value.strip() for value in (date_start_raw, date_end_raw)):
+        parts = []
+        start_display = normalize_display(date_start_raw)
+        end_display = normalize_display(date_end_raw)
+        if start_display:
+            parts.append(start_display)
+        if end_display:
+            parts.append(end_display)
+        if parts:
+            date_display = " | ".join(parts)
+
+    normalized: Dict[str, Any] = {
+        "title": str(title).strip(),
+        "date": event_dt.date().isoformat(),
+        "date_display": date_display or event_dt.strftime("%Y-%m-%d"),
+        "location": raw.get("location") or raw.get("place"),
+        "category": category,
+        "source": payload.get("name"),
+        "source_url": payload.get("source_url"),
+        "link": normalized_link,
+        "summary": raw.get("description") or raw.get("summary"),
+        "raw": raw,
+    }
+
+    if start_dt:
+        normalized["date_start"] = start_dt.date().isoformat()
+    if end_dt:
+        normalized["date_end"] = end_dt.date().isoformat()
+
+    return normalized
+
+
+def group_by_day(events: Iterable[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+    grouped: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for event in events:
+        grouped[event["date"]].append(event)
+    for date_key, items in grouped.items():
+        grouped[date_key] = sorted(items, key=lambda ev: ev["title"].lower())
+    return dict(sorted(grouped.items()))
+
+
+def main() -> None:
+    PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+    normalized: List[Dict[str, Any]] = []
+    seen: set[tuple[str, str, str, str]] = set()
+
+    for payload in load_payloads():
+        for raw_event in payload.get("items", []):
+            event = normalize_event(raw_event, payload)
+            if event:
+                key = (
+                    event["title"].strip().lower(),
+                    event["date"],
+                    (event.get("location") or "").strip().lower(),
+                    (event.get("link") or "").strip().lower(),
+                )
+                if key in seen:
+                    continue
+                seen.add(key)
+                normalized.append(event)
+
+    normalized.sort(key=lambda ev: (ev["date"], ev["title"].lower()))
+    with OUT_ALL.open("w", encoding="utf-8") as fh:
+        json.dump(normalized, fh, ensure_ascii=False, indent=2)
+
+    grouped = group_by_day(normalized)
+    with OUT_BY_DAY.open("w", encoding="utf-8") as fh:
+        json.dump(grouped, fh, ensure_ascii=False, indent=2)
+
+    print(f"Eventos normalizados: {len(normalized)}")
+    print(f"Agrupados por día: {len(grouped)}")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,28 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+.env/
+
+# Distribution / packaging
+build/
+dist/
+.eggs/
+*.egg-info/
+
+# Tools & IDE
+.vscode/
+.idea/
+*.swp
+
+# Logs
+*.log
+
+# Local data outputs
+/data/eventos_raw/
+/data/processed/
+/tmp_*.html
