@@ -603,8 +603,8 @@
       let activeCategory = 'all';
       let searchTerm = '';
       let activeView = 'grid';
-      let activeSources = new Set(Object.keys(sourceMeta));
-      let resetSourcesFlag = false;
+      let activeSources = new Set(); // Inicializar vacío
+      let resetSourcesFlag = true; // True solo para la primera carga
 
       function getStorage() {
         try {
@@ -737,23 +737,34 @@
           return acc;
         }, {});
 
-        const availableSources = Object.keys(counts);
+        // Solo inicializar activeSources si es la primera vez (resetSourcesFlag = true)
+        // Esto sucede SOLO al cargar la página inicialmente
         if (resetSourcesFlag) {
+          const availableSources = Object.keys(counts);
           activeSources = new Set(availableSources);
           resetSourcesFlag = false;
         }
 
+        // Limpiar el contenedor y reconstruir los chips
         sourceChips.innerHTML = '';
+
+        // Mostrar todas las fuentes definidas en sourceMeta, independientemente de si tienen eventos
         Object.entries(sourceMeta)
           .sort((a, b) => (a[1].order || 0) - (b[1].order || 0))
           .forEach(([source, meta]) => {
             const count = counts[source] || 0;
-            if (!count) {
-              return;
-            }
-            const chip = document.createElement('div');
             const active = activeSources.has(source);
+
+            const chip = document.createElement('div');
             chip.className = 'source-chip' + (active ? ' active' : '');
+
+            // Si no hay eventos para esta fuente en esta fecha, mostrarla atenuada
+            if (!count) {
+              chip.style.opacity = active ? '0.6' : '0.3';
+            } else {
+              chip.style.opacity = '1';
+            }
+
             chip.dataset.source = source;
 
             const indicator = document.createElement('div');
@@ -772,6 +783,11 @@
             const counter = document.createElement('span');
             counter.className = 'source-count';
             counter.textContent = `(${count})`;
+
+            // Si no hay eventos para esta fuente, mostrar el contador gris
+            if (!count && active) {
+              counter.style.color = 'var(--text-muted)';
+            }
 
             chip.appendChild(indicator);
             chip.appendChild(name);
@@ -917,7 +933,8 @@
         dateFilter.addEventListener('change', (event) => {
           selectedDate = event.target.value;
           activeCategory = 'all';
-          resetSourcesFlag = true;
+          // NO resetear las fuentes seleccionadas al cambiar fecha
+          // resetSourcesFlag = true;
           renderSources();
           filterEvents();
         });
