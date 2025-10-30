@@ -1,0 +1,97 @@
+url: https://www.elbalcondemateo.es/category/agenda/
+description: |
+  Agenda de eventos familiares y actividades infantiles de El Balcón de Mateo.
+  La página permite filtrar por rangos de fecha mediante parámetros en la URL (f_inicio, f_fin).
+  Este crawler genera automáticamente URLs semanales durante los próximos 3 meses.
+
+# Generación dinámica de URLs por rangos de fecha
+# Placeholders admitidos: {start}, {end}, {start_date}, {end_date}
+date_range:
+  url_pattern: 'https://www.elbalcondemateo.es/category/agenda/?f_inicio={start_date}&f_fin={end_date}'
+  days_ahead: 90 # cuántos días hacia adelante cubrir
+  chunk_days: 1 # tamaño del bloque en días (diario para máxima precisión)
+  single_day: true # usar el mismo día como inicio y fin
+  start_days_back: 0 # opcional, para incluir días anteriores al 'hoy'
+  date_format: '%Y-%m-%d'
+
+schema:
+  name: elbalcon_mateo
+  # Usar los contenedores reales del sitio (.cd_item) además de article
+  baseSelector: '.cd_item, article'
+  fields:
+    - name: title
+      selector: 'a[href], h2 a, h3 a, .entry-title a, .cd_item a'
+      type: text
+    - name: link
+      selector: 'a[href], h2 a, h3 a, .entry-title a, .cd_item a'
+      type: attribute
+      attribute: href
+    - name: category
+      selector: 'article'
+      type: attribute
+      attribute: class
+    - name: date
+      selector: 'time[datetime], time, .entry-date, .cd_agenda-date, .cd_evento-fecha, .fecha'
+      type: text
+    - name: time
+      selector: '.event-time, .hora, .cd_agenda-time'
+      type: text
+    - name: location
+      selector: '.event-location, .lugar, .cd_evento-lugar, .localidad'
+      type: text
+    - name: description
+      selector: '.entry-summary p, .excerpt, .post-excerpt p, .resumen, p, .cd_item--inner, .cd_item'
+      type: text
+    - name: image
+      selector: 'img.wp-post-image, .featured-image img, img'
+      type: attribute
+      attribute: src
+
+postprocess:
+  timezone: Europe/Madrid
+
+run_config:
+  wait_for: 'article'
+  delay_before_return_html: 0.4
+  js_code: |
+    () => {
+      const params = new URLSearchParams(window.location.search || "");
+      const fi = params.get('f_inicio') || params.get('from') || params.get('start');
+      const ff = params.get('f_fin') || params.get('to') || params.get('end');
+      const scope = document.querySelector('main, .site-main, #content, .elementor-widget-container') || document;
+      // Try to find a heading that contains the daily section title
+      const headings = Array.from(scope.querySelectorAll('h1, h2, h3, h4, h5, h6'));
+      let heading = headings.find(h => /eventos\s+para/i.test(h.textContent || '')) || null;
+      let container = null;
+      if (heading) {
+        // Prefer the next block-level element after the heading
+        let sib = heading.nextElementSibling;
+        while (sib && !['DIV','SECTION','ARTICLE','UL','OL'].includes(sib.tagName)) {
+          sib = sib.nextElementSibling;
+        }
+        container = sib || heading.parentElement || scope;
+      } else {
+        container = scope;
+      }
+      const markers = ['cuándo', 'cuando', 'dónde', 'donde', 'hora', 'edad', 'precio'];
+      const isEventLike = (txt) => {
+        const low = (txt || '').toLowerCase();
+        return markers.some(m => low.includes(m));
+      };
+      const anchors = Array.from(container.querySelectorAll('a[href]'))
+        .filter(a => a.href && (a.href.includes('elbalcondemateo.es') || a.getAttribute('href').startsWith('/')))
+        .filter(a => isEventLike(a.textContent || ''))
+        .map(a => {
+          const text = (a.textContent || '').replace(/\s+/g,' ').trim();
+          const idx = text.toLowerCase().indexOf('cuándo');
+          const title = idx > 0 ? text.slice(0, idx).trim() : text.slice(0, 200).trim();
+          return {
+            title: title,
+            link: a.href,
+            description: text,
+            date_start: fi || undefined,
+            date_end: ff || undefined,
+          };
+        });
+      return anchors;
+    }

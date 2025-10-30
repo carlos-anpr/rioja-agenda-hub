@@ -37,14 +37,25 @@ python -m playwright install --with-deps chromium
 
 ## Ejecutar un crawl de ejemplo
 
-1. Ajusta el archivo `crawl_configs/python_events.yaml` si quieres cambiar selectores.
-2. Lanza el crawler:
+1. Ajusta o añade un YAML dentro de `crawl_configs/` si quieres cambiar selectores.
+2. Lanza el crawler para una o varias fuentes (usa el nombre del archivo sin `.yaml`):
 
 ```powershell
-python -m crawlers.do_crawls --only python_events
+python -m crawlers.do_crawls --only agenda_larioja
+python -m crawlers.do_crawls --only elbalcon_mateo
 ```
 
-El JSON resultante quedará en `data/eventos_raw/python_events.json`.
+El JSON resultante quedará en `data/eventos_raw/<nombre>.json`.
+
+### Fuentes incluidas
+
+- `agenda_larioja`: Agenda oficial de La Rioja.
+- `larioja_lalistilla`: Agenda semanal de La Listilla.
+- `logrono_agenda`: Agenda municipal de Logroño (con paginación).
+- `planeta_rioja_planes`: Planes +55 de El Balcón Silver (con paginación).
+- `elbalcon_mateo`: Agenda familiar de El Balcón de Mateo.
+
+`elbalcon_mateo` usa generación dinámica de URLs por rango de fechas mediante `date_range` en su YAML. Puedes ajustar `days_ahead` y `chunk_days` para cubrir más/menos tiempo.
 
 ## Normalizar y consolidar datos
 

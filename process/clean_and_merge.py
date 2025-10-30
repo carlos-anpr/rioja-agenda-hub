@@ -143,7 +143,32 @@ def decode_lalistilla_link(raw_link: str) -> str | None:
     return None
 
 
-def derive_category_and_title(raw: Dict[str, Any]) -> tuple[str, str]:
+def _infer_category_elbalcon(title: str, summary: str | None, link: str | None) -> str | None:
+    text = f"{title} {(summary or '')} {(link or '')}".lower()
+    # Heuristic mapping for El Balcón de Mateo
+    mapping = [
+        (r"\bcuentacuent|cuento|narraci[óo]n|storytime", "Actividades Infantiles"),
+        (r"\bniñ[oa]s?|familia|infantil|peques|ludoteca|ludotecas|payas|magia|titir|títer|clown", "Actividades Infantiles"),
+        (r"\btaller|manualidad|workshop|aprende|formaci[óo]n", "Formación Y Talleres"),
+        (r"\bconciert|m[uú]sic|jazz|rock|pop|band|orquesta|coro|canta", "Conciertos"),
+        (r"\bteatro|escen[aá]|mon[óo]logo|drama|comed", "Teatro"),
+        (r"\bexpo|muestra|galer[ií]a|museo|fotograf|pintur|arte", "Exposiciones"),
+        (r"\bvisita|ruta|paseo|recorrido|gu[ií]a", "Visitas Guiadas"),
+        (r"\bcharla|presentaci[óo]n de libro|libro|lectura|cuenta|poes[ií]a", "Charlas Y Libros"),
+        (r"\bgastronom[ií]a|degustaci[óo]n|cata|p[ií]cnic|vino|tapa", "Gastronomia"),
+        (r"\bpatrimonio|monasterio|castillo|iglesia|ermita|museo|historia", "Patrimonio"),
+        (r"\bferia|festival|jornadas|ciclo|programaci[óo]n", "Evento Cultural"),
+        (r"\bcine|pel[ií]cul|filmoteca|proyecci[óo]n", "Teatro"),
+    ]
+    import re
+
+    for pattern, cat in mapping:
+        if re.search(pattern, text):
+            return cat
+    return None
+
+
+def derive_category_and_title(raw: Dict[str, Any], payload: Dict[str, Any]) -> tuple[str, str]:
     title_source = raw.get("title") or raw.get("heading_text") or raw.get("name") or "Sin título"
     title = str(title_source).strip()
     raw_category = raw.get("category")
@@ -174,14 +199,22 @@ def derive_category_and_title(raw: Dict[str, Any]) -> tuple[str, str]:
             extracted = raw_category
 
     clean_title = title
+    # Avoid inferring category from title prefix for sources like elbalcon_mateo
+    source_name = payload.get("name") if isinstance(payload, dict) else None
     if ":" in title:
         prefix, rest = title.split(":", 1)
         if rest.strip():
-            if not extracted:
+            if not extracted and source_name not in {"elbalcon_mateo"}:
                 extracted = prefix.strip()
             clean_title = rest.strip()
 
     category = clean_category(extracted)
+    # Heuristic fallback for specific sources when category is missing
+    if category.lower() == "sin clasificar":
+        if source_name == "elbalcon_mateo":
+            guess = _infer_category_elbalcon(title, raw.get("description"), raw.get("link"))
+            if guess:
+                category = guess
     return category, clean_title
 
 
@@ -207,11 +240,17 @@ def build_link(raw: Dict[str, Any], payload: Dict[str, Any], anchor: str | None)
 def prepare_date_text(raw: Any) -> str | None:
     if raw is None:
         return None
+    import re
+    # Preserve ISO date strings like YYYY-MM-DD intact
+    if isinstance(raw, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", raw.strip()):
+        return raw.strip()
     text = " ".join(str(raw).replace("\u2014", "–").replace("\u2013", "–").replace("\u2012", "–").split())
     if not text:
         return None
     text = re.sub(r"(?i)^(del|de|desde|hasta|al|a|el|la|los|las)\s+", "", text).strip()
     text = text.split("|", 1)[0].strip()
+    # Only split on dashes when it's a human range '12 oct - 14 oct',
+    # avoid breaking ISO dates already handled above
     text = re.split(r"\s*[–-]\s*", text, maxsplit=1)[0]
     text = re.sub(r"\.(?=\d)", " ", text)
     text = re.sub(r"([A-Za-z])\.", r"\1", text)
@@ -400,7 +439,7 @@ def normalize_event(raw: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, A
         return None
 
     anchor = extract_anchor(raw.get("anchor_id"))
-    category, title = derive_category_and_title(raw)
+    category, title = derive_category_and_title(raw, payload)
     if category.lower() == "sin clasificar" and payload.get("name") == "planeta_rioja_planes":
         category = "Planes"
     link = build_link(raw, payload, anchor)

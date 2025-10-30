@@ -16,6 +16,7 @@ SOURCE_META = {
     "larioja_lalistilla": {"label": "La Listilla", "color": "#764ba2", "order": 1},
     "logrono_agenda": {"label": "Ayuntamiento", "color": "#fbbf24", "order": 2},
     "planeta_rioja_planes": {"label": "Planeta Rioja", "color": "#4ade80", "order": 3},
+    "elbalcon_mateo": {"label": "El Balcón de Mateo", "color": "#ef4444", "order": 4},
 }
 
 CATEGORY_COLORS = {
