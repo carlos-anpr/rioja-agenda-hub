@@ -38,5 +38,9 @@ schema:
       selector: '#ctas_plan a[href]'
       type: attribute
       attribute: href
+    - name: image
+      selector: '.btx-item.js-item-html img'
+      type: attribute
+      attribute: src
 postprocess:
   timezone: Europe/Madrid

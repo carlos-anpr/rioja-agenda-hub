@@ -336,11 +336,71 @@
         background: var(--bg-card);
         border: 1px solid var(--border-color);
         border-radius: 16px;
-        padding: 1.5rem;
         transition: all 0.3s ease;
         cursor: pointer;
         position: relative;
         overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+      }
+
+      .event-card.has-image {
+        padding: 0;
+      }
+
+      .event-card.no-image {
+        padding: 1.5rem;
+      }
+
+      .event-image {
+        width: 100%;
+        height: 200px;
+        object-fit: cover;
+        border-radius: 16px 16px 0 0;
+        background: linear-gradient(
+          135deg,
+          rgba(102, 126, 234, 0.1) 0%,
+          rgba(118, 75, 162, 0.1) 100%
+        );
+      }
+
+      .event-image-container {
+        position: relative;
+        width: 100%;
+        height: 200px;
+        border-radius: 16px 16px 0 0;
+        overflow: hidden;
+      }
+
+      .event-image-placeholder {
+        width: 100%;
+        height: 200px;
+        border-radius: 16px 16px 0 0;
+        background: linear-gradient(
+          135deg,
+          rgba(102, 126, 234, 0.1) 0%,
+          rgba(118, 75, 162, 0.1) 100%
+        );
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 3rem;
+        opacity: 0.6;
+        position: absolute;
+        top: 0;
+        left: 0;
+      }
+
+      .event-content {
+        padding: 1.5rem;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .event-card.no-image .event-content {
+        padding: 0;
       }
 
       .event-card::before {
@@ -365,6 +425,14 @@
         box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
       }
 
+      .event-card:hover .event-image {
+        transform: scale(1.05);
+      }
+
+      .event-image {
+        transition: transform 0.3s ease;
+      }
+
       .event-card:hover::before {
         transform: scaleX(1);
       }
@@ -375,6 +443,10 @@
         align-items: start;
         margin-bottom: 1rem;
         gap: 1rem;
+      }
+
+      .event-card.has-image .event-header {
+        margin-bottom: 1rem;
       }
 
       .event-title {
@@ -842,6 +914,18 @@
         renderEvents(filtered);
       }
 
+      // Función para verificar si una imagen es accesible
+      function preloadImage(src) {
+        return new Promise((resolve) => {
+          const img = new Image();
+          img.onload = () => resolve(true);
+          img.onerror = () => resolve(false);
+          img.src = src;
+          // Timeout después de 3 segundos
+          setTimeout(() => resolve(false), 3000);
+        });
+      }
+
       function renderEvents(events) {
         eventsContainer.className =
           activeView === 'list' ? 'events-grid list-view' : 'events-grid';
@@ -885,35 +969,83 @@
               )
             );
             const hasLink = Boolean(link);
+            const image = escapeHtml(event.image || '');
+            const hasImage = Boolean(image);
+
+            // Truncar descripción para mantener cards limpios
+            let truncatedSummary = summary;
+            if (summary && summary.length > 120) {
+              truncatedSummary = summary.substring(0, 120);
+              // Cortar en la última palabra completa
+              const lastSpace = truncatedSummary.lastIndexOf(' ');
+              if (lastSpace > 80) {
+                truncatedSummary = truncatedSummary.substring(0, lastSpace);
+              }
+              truncatedSummary += '...';
+            }
+
+            // Determinar el icono basado en la categoría
+            const categoryIcons = {
+              conciertos: '🎵',
+              música: '🎼',
+              'música clásica': '🎼',
+              teatro: '🎭',
+              exposiciones: '🖼️',
+              cine: '🎬',
+              cineclub: '🎬',
+              'planes con niños': '👨‍👩‍👧‍👦',
+              'visitas guiadas': '🚶‍♂️',
+              espectáculos: '🎪',
+              planes: '📅',
+              literario: '📚',
+              deporte: '⚽',
+              default: '🎭',
+            };
+            const categoryIcon =
+              categoryIcons[categoryKey] || categoryIcons['default'];
 
             return `
-                    <div class="event-card">
-                        <div class="event-header">
-                            <h3 class="event-title">${title}</h3>
-                            <span class="event-category" style="color:${badgeColor}; background: ${badgeColor}1F;">${category}</span>
-                        </div>
-                        <div class="event-meta">
-                            <div class="event-meta-item">
-                                <svg class="event-meta-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-                                <span>${dateText}</span>
-                            </div>
-                            <div class="event-meta-item">
-                                <svg class="event-meta-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-                                <span>${location}</span>
-                            </div>
-                        </div>
+                    <div class="event-card ${
+                      hasImage ? 'has-image' : 'no-image'
+                    }">
                         ${
-                          summary
-                            ? `<p class="event-description">${summary}</p>`
-                            : ''
+                          hasImage
+                            ? `<div class="event-image-container">
+                            <img src="${image}" alt="${title}" class="event-image" loading="lazy" 
+                             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" 
+                             onload="this.nextElementSibling.style.display='none';">
+                            <div class="event-image-placeholder" style="display: none;">${categoryIcon}</div>
+                           </div>`
+                            : `<div class="event-image-placeholder">${categoryIcon}</div>`
                         }
-                        <div class="event-footer">
-                            <span class="event-source">${source}</span>
+                        <div class="event-content">
+                            <div class="event-header">
+                                <h3 class="event-title">${title}</h3>
+                                <span class="event-category" style="color:${badgeColor}; background: ${badgeColor}1F;">${category}</span>
+                            </div>
+                            <div class="event-meta">
+                                <div class="event-meta-item">
+                                    <svg class="event-meta-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                                    <span>${dateText}</span>
+                                </div>
+                                <div class="event-meta-item">
+                                    <svg class="event-meta-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                                    <span>${location}</span>
+                                </div>
+                            </div>
                             ${
-                              hasLink
-                                ? `<a href="${link}" class="event-link" target="_blank" rel="noopener noreferrer">Ver detalles →</a>`
+                              truncatedSummary
+                                ? `<p class="event-description">${truncatedSummary}</p>`
                                 : ''
                             }
+                            <div class="event-footer">
+                                <span class="event-source">${source}</span>
+                                ${
+                                  hasLink
+                                    ? `<a href="${link}" class="event-link" target="_blank" rel="noopener noreferrer">Ver detalles →</a>`
+                                    : ''
+                                }
+                            </div>
                         </div>
                     </div>
                 `;

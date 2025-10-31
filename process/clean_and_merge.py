@@ -10,6 +10,8 @@ import re
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Tuple
 import unicodedata
+import hashlib
+import urllib.request
 
 from dateutil import parser
 from urllib.parse import parse_qs, urljoin, urlparse, unquote
@@ -18,6 +20,7 @@ from zoneinfo import ZoneInfo
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 RAW_DIR = PROJECT_ROOT / "data" / "eventos_raw"
 PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
+IMAGES_DIR = PROJECT_ROOT / "frontend" / "static" / "images"
 OUT_ALL = PROCESSED_DIR / "eventos.json"
 OUT_BY_DAY = PROCESSED_DIR / "eventos_por_dia.json"
 
@@ -40,6 +43,42 @@ SOURCE_FILTERS: Dict[str, SourceFilters] = {
     "planeta_rioja_planes": SourceFilters(),
     "logrono_agenda": SourceFilters(),
 }
+
+
+def download_lalistilla_image(image_url: str) -> str | None:
+    """Descarga una imagen de La Listilla usando User-Agent y la guarda localmente."""
+    try:
+        # Crear el directorio si no existe
+        IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+        
+        # Crear nombre único basado en la URL
+        url_hash = hashlib.md5(image_url.encode()).hexdigest()
+        image_extension = image_url.split('.')[-1].split('?')[0] if '.' in image_url else 'jpg'
+        local_filename = f"lalistilla_{url_hash}.{image_extension}"
+        local_path = IMAGES_DIR / local_filename
+        
+        # Si ya existe la imagen, devolver la URL local
+        if local_path.exists():
+            return f"./frontend/static/images/{local_filename}"
+        
+        # Crear request con User-Agent
+        req = urllib.request.Request(
+            image_url,
+            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        )
+        
+        # Descargar la imagen
+        with urllib.request.urlopen(req, timeout=10) as response:
+            if response.status == 200:
+                with open(local_path, 'wb') as f:
+                    f.write(response.read())
+                return f"./frontend/static/images/{local_filename}"
+        
+        return None
+        
+    except Exception as e:
+        print(f"⚠️  Error descargando imagen de La Listilla {image_url}: {e}")
+        return None
 
 
 def _coerce_date(value: Any) -> date | None:
@@ -481,6 +520,42 @@ def normalize_event(raw: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, A
         if parts:
             date_display = " | ".join(parts)
 
+    # Procesar imagen
+    raw_image = raw.get("image")
+    normalized_image = None
+    if raw_image:
+        try:
+            # Si es una URL relativa, convertirla a absoluta basada en la fuente
+            source_url = payload.get("source_url", "")
+            if raw_image.startswith("/"):
+                # URL relativa, necesita el dominio
+                if "logrono.es" in source_url:
+                    normalized_image = f"https://logrono.es{raw_image}"
+                elif "elbalcondemateo.es" in source_url:
+                    normalized_image = f"https://www.elbalcondemateo.es{raw_image}"
+                elif "agenda.larioja.com" in source_url:
+                    normalized_image = f"https://agenda.larioja.com{raw_image}"
+                else:
+                    # Extraer dominio genéricamente
+                    parsed = urlparse(source_url)
+                    if parsed.netloc:
+                        normalized_image = f"{parsed.scheme}://{parsed.netloc}{raw_image}"
+            elif raw_image.startswith("http"):
+                # URL ya absoluta
+                normalized_image = raw_image
+                
+            # Para La Listilla, descargar localmente debido a restricciones CORS/User-Agent
+            if normalized_image and ("lalistilla.com" in normalized_image or payload.get("source") == "larioja_lalistilla"):
+                local_image = download_lalistilla_image(normalized_image)
+                if local_image:
+                    normalized_image = local_image
+                else:
+                    normalized_image = None  # Fallo al descargar, no mostrar imagen
+                    
+        except Exception:
+            # En caso de error, no incluir imagen
+            normalized_image = None
+
     normalized: Dict[str, Any] = {
         "title": str(title).strip(),
         "date": event_dt.date().isoformat(),
@@ -491,6 +566,7 @@ def normalize_event(raw: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, A
         "source_url": payload.get("source_url"),
         "link": normalized_link,
         "summary": raw.get("description") or raw.get("summary"),
+        "image": normalized_image,
         "raw": raw,
     }
 

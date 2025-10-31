@@ -3,6 +3,8 @@
 import datetime as dt
 import json
 from pathlib import Path
+import base64
+import mimetypes
 
 import streamlit as st
 from streamlit.components.v1 import html as st_html
@@ -33,6 +35,27 @@ CATEGORY_COLORS = {
     "sin clasificar": "#6B7280",
 }
 DEFAULT_CATEGORY_COLOR = "#667eea"
+
+
+def convert_local_images_to_data_urls(eventos_por_dia: dict[str, list[dict]]) -> dict[str, list[dict]]:
+    """Convierte las rutas de imágenes locales a data URLs para que funcionen en Streamlit."""
+    for date_key, eventos in eventos_por_dia.items():
+        for evento in eventos:
+            if evento.get('image') and evento['image'].startswith('./frontend/static/images/'):
+                image_path = Path(PROJECT_ROOT) / evento['image'].replace('./', '')
+                if image_path.exists():
+                    try:
+                        with open(image_path, 'rb') as f:
+                            image_data = f.read()
+                        mime_type, _ = mimetypes.guess_type(str(image_path))
+                        if mime_type:
+                            data_url = f"data:{mime_type};base64,{base64.b64encode(image_data).decode()}"
+                            evento['image'] = data_url
+                    except Exception as e:
+                        print(f"Error convirtiendo imagen {image_path}: {e}")
+                        # Si falla, eliminar la imagen para que use placeholder
+                        evento['image'] = None
+    return eventos_por_dia
 
 
 def build_html_payload(
@@ -96,6 +119,9 @@ def main() -> None:
     if not eventos_por_dia:
         st.info("🎪 Aún no hay eventos cargados. Lanza el crawler para poblar la base de datos.")
         return
+
+    # Convertir imágenes locales a data URLs
+    eventos_por_dia = convert_local_images_to_data_urls(eventos_por_dia)
 
     today = dt.date.today().isoformat()
     fechas = sorted(eventos_por_dia.keys())
