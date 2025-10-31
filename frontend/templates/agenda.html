@@ -994,6 +994,7 @@
               cine: '🎬',
               cineclub: '🎬',
               'planes con niños': '👨‍👩‍👧‍👦',
+              'actividades infantiles': '👨‍👩‍👧‍👦',
               'visitas guiadas': '🚶‍♂️',
               espectáculos: '🎪',
               planes: '📅',
@@ -1012,11 +1013,15 @@
                           hasImage
                             ? `<div class="event-image-container">
                             <img src="${image}" alt="${title}" class="event-image" loading="lazy" 
-                             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" 
-                             onload="this.nextElementSibling.style.display='none';">
-                            <div class="event-image-placeholder" style="display: none;">${categoryIcon}</div>
+                             onerror="
+                               const c=this.closest('.event-image-container');
+                               const card=this.closest('.event-card');
+                               if(c) c.style.display='none';
+                               if(card){ card.classList.remove('has-image'); card.classList.add('no-image'); }
+                             " 
+                             onload="/* nada especial, la imagen se muestra */">
                            </div>`
-                            : `<div class="event-image-placeholder">${categoryIcon}</div>`
+                            : ``
                         }
                         <div class="event-content">
                             <div class="event-header">

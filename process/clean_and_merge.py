@@ -15,6 +15,7 @@ import urllib.request
 
 from dateutil import parser
 from urllib.parse import parse_qs, urljoin, urlparse, unquote
+from bs4 import BeautifulSoup
 from zoneinfo import ZoneInfo
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -23,6 +24,130 @@ PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
 IMAGES_DIR = PROJECT_ROOT / "frontend" / "static" / "images"
 OUT_ALL = PROCESSED_DIR / "eventos.json"
 OUT_BY_DAY = PROCESSED_DIR / "eventos_por_dia.json"
+
+
+def fetch_elbalcon_day_raw(date_iso: str) -> list[dict[str, Any]]:
+    """Fallback de emergencia: extrae anclas con 'Cuándo/Dónde/Hora…' del día dado.
+
+    Devuelve items crudos con title/link/description y date_start/date_end=fecha.
+    """
+    try:
+        url = f"https://www.elbalcondemateo.es/category/agenda/?f_inicio={date_iso}&f_fin={date_iso}"
+        req = urllib.request.Request(url, headers={
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        })
+        html = urllib.request.urlopen(req, timeout=20).read().decode('utf-8', 'ignore')
+        soup = BeautifulSoup(html, 'html.parser')
+        markers = ("cuándo", "cuando", "dónde", "donde", "hora", "edad", "precio")
+        items: list[dict[str, Any]] = []
+        def get_first_plausible_img(node) -> str | None:
+            # Buscar imágenes en el nodo con varias estrategias comunes de lazy-load
+            if not node:
+                return None
+            def extract_src(img_tag) -> str | None:
+                if not img_tag:
+                    return None
+                for attr in ("src", "data-src", "data-lazy", "data-original", "data-srcset", "srcset"):
+                    val = img_tag.get(attr)
+                    if val:
+                        val = val.strip()
+                        # Si es srcset, usar el primer candidato
+                        if attr.endswith("srcset") and "," in val:
+                            val = val.split(",")[0].strip().split(" ")[0]
+                        return val
+                return None
+
+            # Revisar imágenes en el propio nodo
+            for img in node.select("img"):
+                cand = extract_src(img)
+                if cand and is_plausible_lalistilla_image(cand):  # reutilizamos heurística de extensión
+                    return urljoin("https://www.elbalcondemateo.es/", cand)
+
+            # Mirar imágenes cercanas en padres inmediatos
+            parent = getattr(node, 'parent', None)
+            hops = 0
+            while parent is not None and hops < 3:
+                for img in parent.select("img"):
+                    cand = extract_src(img)
+                    if cand and is_plausible_lalistilla_image(cand):
+                        return urljoin("https://www.elbalcondemateo.es/", cand)
+                parent = getattr(parent, 'parent', None)
+                hops += 1
+            return None
+
+        # 1) Anclas con texto tipo evento
+        for a in soup.select('a[href]'):
+            href = a.get('href')
+            if not href:
+                continue
+            text = a.get_text(' ', strip=True)
+            if not text:
+                continue
+            low = text.lower()
+            if not any(m in low for m in markers):
+                continue
+            # Título hasta 'Cuándo'
+            import re as _re
+            title = text
+            m = _re.search(r"(?i)\bcu[aá]ndo\b\s*:\s*", text)
+            if m:
+                title = text[: m.start()].strip()
+            item = {
+                'title': title[:200],
+                'link': href,
+                'description': text,
+                'date_start': date_iso,
+                'date_end': date_iso,
+            }
+            # Intentar imagen desde el contexto del anchor
+            img_url = get_first_plausible_img(a)
+            if not img_url and href.startswith("http"):
+                # Fallback og:image en la página del evento
+                og = fetch_og_image(href)
+                if og and is_plausible_lalistilla_image(og):
+                    img_url = og
+            if img_url:
+                item['image'] = img_url
+            items.append(item)
+        # 2) Bloques de tarjetas/artículos
+        selectors = [
+            'article', '.post', '.elementor-post', '.listing-item', '.event-item',
+            '.plan-item', '.cd_item', '.cd_item--inner', '.cd_item-border--yellow'
+        ]
+        for sel in selectors:
+            for node in soup.select(sel):
+                a = node.select_one('a[href]')
+                if not a:
+                    continue
+                href = a.get('href')
+                if not href:
+                    continue
+                text = a.get_text(' ', strip=True) or node.get_text(' ', strip=True)
+                if not text:
+                    continue
+                title = text[:200]
+                # Evitar duplicados por enlace
+                if any(it.get('link') == href for it in items):
+                    continue
+                item = {
+                    'title': title,
+                    'link': href,
+                    'description': node.get_text(' ', strip=True)[:500],
+                    'date_start': date_iso,
+                    'date_end': date_iso,
+                }
+                # Imagen preferentemente del propio nodo
+                img_url = get_first_plausible_img(node)
+                if not img_url and href.startswith("http"):
+                    og = fetch_og_image(href)
+                    if og and is_plausible_lalistilla_image(og):
+                        img_url = og
+                if img_url:
+                    item['image'] = img_url
+                items.append(item)
+        return items
+    except Exception:
+        return []
 
 
 @dataclass(frozen=True)
@@ -79,6 +204,54 @@ def download_lalistilla_image(image_url: str) -> str | None:
     except Exception as e:
         print(f"⚠️  Error descargando imagen de La Listilla {image_url}: {e}")
         return None
+
+
+def is_plausible_lalistilla_image(url: str) -> bool:
+    """Heurística conservadora: aceptar solo imágenes que parezcan del evento.
+
+    - Extensiones permitidas: .jpg/.jpeg/.png/.webp
+    - Rechazar si contiene palabras comúnmente de iconos/logos/placeholders
+    - Preferir dominios de La Listilla pero permitir absolutos válidos
+    """
+    if not isinstance(url, str) or not url:
+        return False
+    u = url.lower()
+    # Extensiones válidas
+    if not any(u.split('?')[0].endswith(ext) for ext in (".jpg", ".jpeg", ".png", ".webp")):
+        return False
+    # Palabras a evitar (iconos, logos, favicons, sprites, placeholders, emojis)
+    blacklist = (
+        "logo", "favicon", "sprite", "icon", "placeholder", "default",
+        "/twf-", "emoji", "/wp-includes/", "/themes/", "/assets/",
+        "1x1", "pixel",
+    )
+    if any(b in u for b in blacklist):
+        return False
+    return True
+
+
+def fetch_og_image(page_url: str, timeout: int = 10) -> str | None:
+    """Obtiene og:image o twitter:image de una página con User-Agent.
+
+    Devuelve URL absoluta si existe; si no, None.
+    """
+    try:
+        req = urllib.request.Request(
+            page_url,
+            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            if resp.status != 200:
+                return None
+            html = resp.read().decode(errors='ignore')
+        soup = BeautifulSoup(html, 'html.parser')
+        for prop in ("og:image", "twitter:image", "og:image:url"):
+            tag = soup.find("meta", attrs={"property": prop}) or soup.find("meta", attrs={"name": prop})
+            if tag and tag.get("content"):
+                return urljoin(page_url, tag["content"].strip())
+    except Exception:
+        return None
+    return None
 
 
 def _coerce_date(value: Any) -> date | None:
@@ -523,10 +696,10 @@ def normalize_event(raw: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, A
     # Procesar imagen
     raw_image = raw.get("image")
     normalized_image = None
-    if raw_image:
-        try:
-            # Si es una URL relativa, convertirla a absoluta basada en la fuente
-            source_url = payload.get("source_url", "")
+    try:
+        # Si es una URL relativa, convertirla a absoluta basada en la fuente
+        source_url = payload.get("source_url", "")
+        if isinstance(raw_image, str) and raw_image:
             if raw_image.startswith("/"):
                 # URL relativa, necesita el dominio
                 if "logrono.es" in source_url:
@@ -540,21 +713,36 @@ def normalize_event(raw: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, A
                     parsed = urlparse(source_url)
                     if parsed.netloc:
                         normalized_image = f"{parsed.scheme}://{parsed.netloc}{raw_image}"
+            elif raw_image.startswith("//"):
+                # URL protocolo-relativa
+                normalized_image = f"https:{raw_image}"
             elif raw_image.startswith("http"):
                 # URL ya absoluta
                 normalized_image = raw_image
-                
-            # Para La Listilla, descargar localmente debido a restricciones CORS/User-Agent
-            if normalized_image and ("lalistilla.com" in normalized_image or payload.get("source") == "larioja_lalistilla"):
-                local_image = download_lalistilla_image(normalized_image)
-                if local_image:
-                    normalized_image = local_image
-                else:
-                    normalized_image = None  # Fallo al descargar, no mostrar imagen
-                    
-        except Exception:
-            # En caso de error, no incluir imagen
-            normalized_image = None
+
+        # Reglas específicas para La Listilla: solo usar imagen si es segura
+        if payload.get("name") == "larioja_lalistilla":
+            candidate_url: str | None = None
+            # 1) Probar a obtener og:image de la página del evento si hay link
+            if normalized_link and isinstance(normalized_link, str) and normalized_link.startswith("http"):
+                og = fetch_og_image(normalized_link)
+                if og and is_plausible_lalistilla_image(og):
+                    candidate_url = og
+
+            # 2) Si no hay og:image válida, usar la extraída solo si es plausible
+            if not candidate_url and normalized_image and is_plausible_lalistilla_image(normalized_image):
+                candidate_url = normalized_image
+
+            # 3) Si no hay ninguna candidata clara, no usar imagen
+            if candidate_url:
+                local_image = download_lalistilla_image(candidate_url)
+                normalized_image = local_image if local_image else None
+            else:
+                normalized_image = None
+
+    except Exception:
+        # En caso de error, no incluir imagen
+        normalized_image = None
 
     normalized: Dict[str, Any] = {
         "title": str(title).strip(),
@@ -599,10 +787,38 @@ def main() -> None:
     normalized: List[Dict[str, Any]] = []
     seen: set[tuple[str, str, str, str]] = set()
 
-    for payload in load_payloads():
+    raw_payloads = list(load_payloads())
+    for payload in raw_payloads:
         for raw_event in payload.get("items", []):
             event = normalize_event(raw_event, payload)
             if event:
+                key = (
+                    event["title"].strip().lower(),
+                    event["date"],
+                    (event.get("location") or "").strip().lower(),
+                    (event.get("link") or "").strip().lower(),
+                )
+                if key in seen:
+                    continue
+                seen.add(key)
+                normalized.append(event)
+
+    # Backfill: si hoy no hay eventos de El Balcón de Mateo, intentar extraerlos directamente
+    # para un mejor UX. Se aplica sólo al día actual.
+    today = datetime.now().date().isoformat()
+    has_elbalcon_today = any(ev.get("source") == "elbalcon_mateo" and ev.get("date") == today for ev in normalized)
+    if not has_elbalcon_today:
+        fallback_items = fetch_elbalcon_day_raw(today)
+        if fallback_items:
+            synthetic_payload = {
+                "name": "elbalcon_mateo",
+                "source_url": f"https://www.elbalcondemateo.es/category/agenda/?f_inicio={today}&f_fin={today}",
+                "metadata": {"postprocess": {"timezone": "Europe/Madrid"}},
+            }
+            for raw_event in fallback_items:
+                event = normalize_event(raw_event, synthetic_payload)
+                if not event:
+                    continue
                 key = (
                     event["title"].strip().lower(),
                     event["date"],

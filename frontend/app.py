@@ -26,6 +26,7 @@ CATEGORY_COLORS = {
     "conciertos": "#CE5A83",
     "exposiciones": "#D29B3D",
     "planes con niños": "#2FA37A",
+    "actividades infantiles": "#F97316",
     "visitas guiadas": "#4A86D4",
     "espectáculos": "#D46464",
     "cineclub": "#5F66D6",
