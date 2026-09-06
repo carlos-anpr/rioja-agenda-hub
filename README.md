@@ -1,4 +1,17 @@
-# 🎭 Agenda Cultural La Rioja
+<div align="center">
+
+# **🎭 Agenda Cultural La Rioja**
+
+### *Todos los eventos culturales de La Rioja, unificados en un solo sitio*
+
+[![Python](https://img.shields.io/badge/Python-≥3.10-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org)
+[![Crawl4AI](https://img.shields.io/badge/Crawl4AI-crawling-8B5CF6?style=flat-square)](https://github.com/unclecode/crawl4ai)
+[![Playwright](https://img.shields.io/badge/Playwright-browser%20automation-2EAD33?style=flat-square&logo=playwright&logoColor=white)](https://playwright.dev)
+[![Streamlit](https://img.shields.io/badge/Streamlit-frontend-FF4B4B?style=flat-square&logo=streamlit&logoColor=white)](https://streamlit.io)
+
+</div>
+
+---
 
 **Todos los eventos culturales de La Rioja, unificados en un solo sitio.**
 Rastreamos las mejores agendas de la región (institucional, municipal, medios locales y
