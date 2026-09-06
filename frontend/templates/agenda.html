@@ -115,6 +115,33 @@
         margin-bottom: 2rem;
         backdrop-filter: blur(10px);
       }
+      .search-scope {
+        display: flex;
+        gap: .5rem;
+        align-items: center;
+        margin-top: .5rem;
+        flex-wrap: wrap; /* Evita forzar el ancho de la columna */
+        width: 100%;
+      }
+      .scope-btn {
+        padding: .25rem .5rem; /* más compacto */
+        border: 1px solid var(--border-color);
+        background: rgba(102,126,234,0.06);
+        color: var(--text-secondary);
+        border-radius: 999px;
+        font-size: .75rem; /* más compacto */
+        cursor: pointer;
+      }
+      .scope-btn.active {
+        background: rgba(102,126,234,0.18);
+        color: var(--accent-primary);
+        border-color: var(--accent-primary);
+      }
+      .scope-hint {
+        font-size: .75rem;
+        color: var(--text-muted);
+        margin-top: .25rem;
+      }
 
       .filters-header {
         display: flex;
@@ -157,6 +184,7 @@
 
       .filters-compact {
         display: grid;
+        /* Columna izquierda auto, pero la fijamos vía .filters-left */
         grid-template-columns: auto 1fr;
         gap: 1.5rem;
         align-items: start;
@@ -166,7 +194,11 @@
         display: flex;
         flex-direction: column;
         gap: 1rem;
-        min-width: 200px;
+        /* Fijar ancho pequeño y estable, solo afecta a la anchura */
+        width: 220px;
+        min-width: 220px;
+        max-width: 220px;
+        flex: none;
       }
 
       .filters-right {
@@ -191,12 +223,12 @@
 
       .filter-input {
         width: 100%;
-        padding: 0.75rem 1rem;
+        padding: 0.75rem 1rem; /* restaurar altura original */
         background: rgba(102, 126, 234, 0.05);
         border: 1px solid var(--border-color);
         border-radius: 8px;
         color: var(--text-primary);
-        font-size: 0.95rem;
+        font-size: 0.95rem; /* restaurar altura/lectura original */
         transition: all 0.3s ease;
       }
 
@@ -548,6 +580,8 @@
 
         .filters-left {
           min-width: 100%;
+          width: 100%;
+          max-width: 100%;
         }
       }
 
@@ -622,6 +656,11 @@
                 placeholder="Buscar eventos..."
               />
             </div>
+            <div class="search-scope" id="searchScope">
+              <button class="scope-btn active" data-scope="day" title="Buscar en la fecha seleccionada">En la fecha</button>
+              <button class="scope-btn" data-scope="global" title="Buscar en todas las fechas (requiere ≥ 4 letras)">Global</button>
+            </div>
+            <div class="scope-hint" id="scopeHint" style="display:none;">Escribe al menos 4 caracteres para buscar globalmente</div>
           </div>
 
           <div class="filters-right">
@@ -658,6 +697,8 @@
       const themeIcon = document.getElementById('themeIcon');
       const dateFilter = document.getElementById('dateFilter');
       const searchFilter = document.getElementById('searchFilter');
+  const searchScopeEl = document.getElementById('searchScope');
+  const scopeHint = document.getElementById('scopeHint');
       const categoryCloud = document.getElementById('categoryCloud');
       const sourceChips = document.getElementById('sourceChips');
       const viewButtons = document.querySelectorAll('.view-btn');
@@ -677,6 +718,10 @@
       let activeView = 'grid';
       let activeSources = new Set(); // Inicializar vacío
       let resetSourcesFlag = true; // True solo para la primera carga
+  let globalSearch = false; // sólo efectivo si searchTerm.length >= 4
+  const PAGE_SIZE = 150;
+  let currentResults = [];
+  let visibleLimit = PAGE_SIZE;
 
       function getStorage() {
         try {
@@ -716,6 +761,16 @@
         return (text || '').toString().toLowerCase();
       }
 
+      function makeEventKey(event) {
+        const src = (event.source || '').toLowerCase();
+        const link = (event.link || '').trim().toLowerCase();
+        const titleKey = slugify(event.title || '');
+        const ds = event.date_start || '';
+        const de = event.date_end || '';
+        // Clave estable por fuente + (link o título) + rango de fechas
+        return `${src}|${link || titleKey}|${ds}|${de}`;
+      }
+
       function escapeHtml(text) {
         if (!text) return '';
         return text
@@ -747,9 +802,34 @@
         return single.toLocaleDateString(locale, opts);
       }
 
+      function getEventPool() {
+        // Global sólo si hay término de búsqueda suficientemente largo
+        const doGlobal = globalSearch && searchTerm && searchTerm.length >= 4;
+        if (doGlobal) {
+          const all = [];
+          for (const d of dates) {
+            const arr = eventosPorDia[d] || [];
+            if (arr && arr.length) all.push(...arr);
+          }
+          // Eliminar duplicados del mismo evento en diferentes días cuando
+          // comparten el mismo rango de fechas (multi-day) y son el mismo enlace/título
+          const seen = new Set();
+          const unique = [];
+          for (const ev of all) {
+            const key = makeEventKey(ev);
+            if (seen.has(key)) continue;
+            seen.add(key);
+            unique.push(ev);
+          }
+          return unique;
+        }
+        return (eventosPorDia[selectedDate] || []).slice();
+      }
+
       function renderCategories() {
         categoryCloud.innerHTML = '';
-        const allEvents = eventosPorDia[selectedDate] || [];
+        // Mantener categorías basadas en la fecha seleccionada para ligereza
+        const allEvents = (eventosPorDia[selectedDate] || []).slice();
         const eventsForCounts = activeSources.size
           ? allEvents.filter((evt) =>
               activeSources.has(evt.source || 'desconocido')
@@ -802,7 +882,8 @@
       }
 
       function renderSources() {
-        const events = eventosPorDia[selectedDate] || [];
+        // Mantener contadores por fecha seleccionada para no cargar todo
+        const events = (eventosPorDia[selectedDate] || []).slice();
         const counts = events.reduce((acc, evt) => {
           const src = evt.source || 'desconocido';
           acc[src] = (acc[src] || 0) + 1;
@@ -882,36 +963,32 @@
       }
 
       function filterEvents() {
-        const events = (eventosPorDia[selectedDate] || []).slice();
+        const events = getEventPool();
 
         if (!activeSources.size) {
-          renderEvents([]);
+          renderEvents([], { total: 0, visible: 0 });
           return;
         }
 
         const filtered = events.filter((event) => {
           const source = event.source || 'desconocido';
-          if (!activeSources.has(source)) {
-            return false;
-          }
+          if (!activeSources.has(source)) return false;
           if (activeCategory !== 'all') {
             const category = event.category || 'Sin clasificar';
-            if (category !== activeCategory) {
-              return false;
-            }
+            if (category !== activeCategory) return false;
           }
           if (searchTerm) {
-            const haystack = `${event.title || ''} ${event.summary || ''} ${
-              event.location || ''
-            }`.toLowerCase();
-            if (!haystack.includes(searchTerm)) {
-              return false;
-            }
+            const haystack = `${(event.title || '')} ${(event.summary || '')} ${(event.location || '')}`.toLowerCase();
+            if (!haystack.includes(searchTerm)) return false;
           }
           return true;
         });
 
-        renderEvents(filtered);
+        currentResults = filtered;
+        // Reiniciar límite si cambia la query/pool
+        visibleLimit = PAGE_SIZE;
+        const visible = currentResults.slice(0, visibleLimit);
+        renderEvents(visible, { total: currentResults.length, visible: visible.length });
       }
 
       // Función para verificar si una imagen es accesible
@@ -926,11 +1003,13 @@
         });
       }
 
-      function renderEvents(events) {
+      function renderEvents(events, meta = { total: events.length, visible: events.length }) {
         eventsContainer.className =
           activeView === 'list' ? 'events-grid list-view' : 'events-grid';
+        const total = meta.total || 0;
+        const visible = meta.visible || 0;
         if (!events.length) {
-          eventCount.textContent = '0';
+          eventCount.textContent = total > 0 ? `${visible}/${total}` : '0';
           eventsContainer.innerHTML = `
                     <div class="empty-state">
                         <div class="empty-state-icon">🔍</div>
@@ -938,11 +1017,14 @@
                         <p>Intenta ajustar los filtros para ver más resultados</p>
                     </div>
                 `;
+          // Ocultar botón de carga si existiera
+          const loadMore = document.getElementById('loadMoreBtn');
+          if (loadMore) loadMore.style.display = 'none';
           updateFrameHeight();
           return;
         }
 
-        eventCount.textContent = `${events.length}`;
+        eventCount.textContent = total > visible ? `${visible}/${total}` : `${visible}`;
 
         const cards = events
           .map((event) => {
@@ -1058,6 +1140,33 @@
           .join('');
 
         eventsContainer.innerHTML = cards;
+        // Botón "Cargar más" si procede
+        let loadMore = document.getElementById('loadMoreBtn');
+        if (total > visible) {
+          if (!loadMore) {
+            loadMore = document.createElement('button');
+            loadMore.id = 'loadMoreBtn';
+            loadMore.textContent = `Mostrar más (${visible}/${total})`;
+            loadMore.style.margin = '1rem auto 0';
+            loadMore.style.display = 'block';
+            loadMore.style.padding = '.6rem 1rem';
+            loadMore.style.borderRadius = '8px';
+            loadMore.style.border = '1px solid var(--border-color)';
+            loadMore.style.background = 'var(--bg-card)';
+            loadMore.style.color = 'var(--text-primary)';
+            loadMore.addEventListener('click', () => {
+              visibleLimit = Math.min(visibleLimit + PAGE_SIZE, currentResults.length);
+              const newVisible = currentResults.slice(0, visibleLimit);
+              renderEvents(newVisible, { total: currentResults.length, visible: newVisible.length });
+            });
+            eventsContainer.parentElement.appendChild(loadMore);
+          } else {
+            loadMore.textContent = `Mostrar más (${visible}/${total})`;
+            loadMore.style.display = 'block';
+          }
+        } else if (loadMore) {
+          loadMore.style.display = 'none';
+        }
         updateFrameHeight();
       }
 
@@ -1065,8 +1174,32 @@
         themeToggle.addEventListener('click', toggleTheme);
         searchFilter.addEventListener('input', (event) => {
           searchTerm = event.target.value.trim().toLowerCase();
+          // Mostrar u ocultar hint según alcance
+          const doGlobal = globalSearch && searchTerm && searchTerm.length >= 4;
+          scopeHint.style.display = globalSearch && !doGlobal ? 'block' : 'none';
           filterEvents();
         });
+        // Scope toggle buttons
+        if (searchScopeEl) {
+          searchScopeEl.addEventListener('click', (e) => {
+            const btn = e.target.closest('.scope-btn');
+            if (!btn) return;
+            const scope = btn.dataset.scope;
+            if (!scope) return;
+            globalSearch = scope === 'global';
+            // UI state
+            for (const b of searchScopeEl.querySelectorAll('.scope-btn')) {
+              b.classList.toggle('active', b === btn);
+            }
+            if (safeStorage) safeStorage.setItem('agendaSearchScope', globalSearch ? 'global' : 'day');
+            // Hint sólo si global y menos de 4
+            const doGlobal = globalSearch && searchTerm && searchTerm.length >= 4;
+            scopeHint.style.display = globalSearch && !doGlobal ? 'block' : 'none';
+            // No cambiamos fecha ni fuentes
+            activeCategory = 'all';
+            filterEvents();
+          });
+        }
         dateFilter.addEventListener('change', (event) => {
           selectedDate = event.target.value;
           activeCategory = 'all';
@@ -1120,6 +1253,15 @@
         dateFilter.min = minDate;
         dateFilter.max = maxDate;
         dateFilter.value = selectedDate;
+        // Cargar preferencia de alcance
+        const savedScope = safeStorage?.getItem('agendaSearchScope');
+        globalSearch = savedScope === 'global';
+        if (searchScopeEl) {
+          for (const b of searchScopeEl.querySelectorAll('.scope-btn')) {
+            b.classList.toggle('active', b.dataset.scope === (globalSearch ? 'global' : 'day'));
+          }
+        }
+        scopeHint.style.display = 'none';
         loadTheme();
         renderSources();
         filterEvents();
