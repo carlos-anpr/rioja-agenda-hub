@@ -1,6 +1,37 @@
-# Crawler Evento
+# 🎭 Agenda Cultural La Rioja
 
-Pipeline inicial para recolectar eventos desde múltiples sitios con [Crawl4AI](https://github.com/unclecode/crawl4ai), dejar los datos normalizados y servirlos en una pequeña interfaz con Streamlit.
+**Todos los eventos culturales de La Rioja, unificados en un solo sitio.**
+Rastreamos las mejores agendas de la región (institucional, municipal, medios locales y
+blogs familiares), limpiamos y normalizamos los datos, y los servimos en una web con
+filtros por fecha, categoría y fuente. Sin registrarse, sin configurar nada: abres y
+ves qué hacer hoy, este fin de semana o dentro de tres meses.
+
+![Agenda Cultural La Rioja en acción: filtros arriba y rejilla de eventos debajo](docs/screenshots/hero.png)
+
+## Así luce la aplicación
+
+| | |
+|---|---|
+| ![Rejilla de eventos con imágenes, categorías y fuentes](docs/screenshots/grid.png) | ![Agenda de diciembre: cobertura de eventos hasta fin de año y más allá](docs/screenshots/agenda-diciembre.png) |
+| **Rejilla visual** - cada evento con su imagen, categoría, fechas y fuente de origen. Modo claro y oscuro incluidos. | **Agenda futura** - eventos cubiertos hasta final de 2026 (y más allá). Elige cualquier fecha y mira qué hay ese día. |
+
+## Usarlo es así de fácil
+
+1. **Elige el día.** Cambia la fecha y verás al instante los eventos de ese día.
+2. **Filtra a tu gusto.** Por categoría (conciertos, exposiciones, planes con niños...),
+   por fuente, o busca por texto con el buscador global.
+3. **Abre el evento.** Cada tarjeta enlaza a la página original con todos los detalles.
+   Cambia entre vista rejilla o lista, y activa el modo oscuro con la luna 🌙.
+
+## Fuentes unificadas
+
+| Fuente | Qué es |
+|---|---|
+| Agenda La Rioja | Agenda cultural oficial del Gobierno de La Rioja |
+| Ayuntamiento de Logroño | Agenda municipal de ocio y cultura |
+| La Listilla | Agenda semanal de planes en La Rioja |
+| Planeta Rioja | Planes +55 de El Balcón Silver |
+| El Balcón de Mateo | Agenda familiar y actividades infantiles |
 
 ## Estructura
 
@@ -71,7 +102,7 @@ Esto genera `data/processed/eventos_por_dia.json` con los eventos agrupados por 
 streamlit run frontend/app.py
 ```
 
-La app carga los datos consolidados, permite filtrar por fecha y categoría, y sirve como punto de partida para extender la visualización.
+La app carga los datos consolidados y sirve la interfaz web con filtros por fecha, categoría y fuente.
 
 ## Próximos pasos sugeridos
 
