@@ -8,7 +8,7 @@ description: |
 # Placeholders admitidos: {start}, {end}, {start_date}, {end_date}
 date_range:
   url_pattern: 'https://www.elbalcondemateo.es/category/agenda/?f_inicio={start_date}&f_fin={end_date}'
-  days_ahead: 90 # cuántos días hacia adelante cubrir
+  days_ahead: 117 # cuántos días hacia adelante cubrir (hasta el 31/12/2026)
   chunk_days: 1 # tamaño del bloque en días (diario para máxima precisión)
   single_day: true # usar el mismo día como inicio y fin
   start_days_back: 0 # opcional, para incluir días anteriores al 'hoy'
